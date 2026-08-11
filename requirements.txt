@@ -8,5 +8,6 @@ plotly==5.15.0
 seaborn==0.13.2
 fvcore
 einops
-pydantic=2.12.5
+pydantic==2.12.5
+chronos-forecasting
 
