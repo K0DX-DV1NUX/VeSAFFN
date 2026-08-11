@@ -1,0 +1,58 @@
+[default]
+d_model = "ModernTCN"
+d_model_input_type = "x_only"
+
+# ModernTCN params
+m_stem_ratio = 6
+m_downsample_ratio = 2
+m_ffn_ratio = 1
+m_patch_size = 8
+m_patch_stride = 4
+m_num_blocks = [1]
+m_large_size = [51]
+m_small_size = [5]
+m_dims = [64, 64, 64, 64]
+m_dw_dims = [256, 256, 256, 256]
+m_head_dropout = 0.0
+m_dropout = 0.3
+m_use_multi_scale = false
+m_small_kernel_merged = false
+m_revin = true
+m_affine = false
+m_subtract_last = false
+m_individual = false
+m_decomposition = 0
+m_kernel_size = 25
+
+# -------------------------
+# Runs
+# -------------------------
+[[runs]]
+d_seq_len = 336
+d_pred_len = 48
+d_test_stride = 48
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 512
+d_test_stride = 512
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720

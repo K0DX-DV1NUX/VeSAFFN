@@ -1,0 +1,12 @@
+torch==2.10.0
+scikit-learn==1.8.0
+pandas==3.0.1
+numpy==2.4.3
+scipy==1.17.0
+matplotlib==3.10.8
+plotly==5.15.0
+seaborn==0.13.2
+fvcore
+einops
+pydantic=2.12.5
+

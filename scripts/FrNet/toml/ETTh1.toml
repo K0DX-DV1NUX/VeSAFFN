@@ -1,0 +1,65 @@
+[default]
+d_model = "FrNet"
+d_model_input_type = "x_only"
+
+
+# FrNet params
+m_use_norm = true
+m_embed = "timeF"
+m_dropout = 0.05
+m_fc_dropout = 0.1
+m_head_dropout = 0.1
+m_patch_len = 24
+m_stride = 24
+m_kernel_size = 25
+m_pred_head_type = "truncation"
+m_aggregation_type = "avg"
+m_channel_attention = 0
+m_global_freq_pred = 0
+m_emb = 96
+m_n_heads = 1
+m_e_layers = 1
+m_d_model = 16
+m_d_ff = 128
+m_decomposition = 0
+m_affine = true
+m_subtract_last = false
+
+# -------------------------
+# Runs
+# -------------------------
+[[runs]]
+d_seq_len = 336
+d_pred_len = 48
+d_test_stride = 48
+m_period_list = [24, 48, 72]
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+m_period_list = [24, 48, 72]
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+m_period_list = [24, 48]
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+m_period_list = [24, 48]
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 512
+d_test_stride = 512
+m_period_list = [24, 48]
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+m_period_list = [24, 48, 72]

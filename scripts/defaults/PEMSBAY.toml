@@ -1,0 +1,24 @@
+# -------------------------
+# Defaults (shared settings)
+# -------------------------
+[default]
+# Training
+d_is_training = 1
+d_train_epochs = 100
+d_patience = 20
+d_learning_rate = 0.001
+d_batch_size = 32
+d_train_stride = 5
+d_test_stride = 1
+d_lradj = "type7"
+
+
+# Data
+d_root_path = "../dataset"
+d_data = "PEMSBAY"
+d_data_path = "pems-bay.csv"
+d_freq = "min"
+d_forecast_type = "M"
+d_in_features = 325
+d_out_features = 325
+d_inverse_transform = false

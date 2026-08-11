@@ -1,0 +1,8 @@
+# -------------------------
+# GPU settings
+# -------------------------
+[gpu]
+
+d_num_workers = 10
+d_use_gpu = true
+d_gpu = 0
