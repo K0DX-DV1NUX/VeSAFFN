@@ -8,11 +8,10 @@ from layers.RevIN import RevIN
 class SharedLinear(nn.Module):
     """
     """
-    def __init__(self, in_features, out_features, shared_U, bias=True):
+    def __init__(self, in_features, out_features, bias=True):
         super(SharedLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.shared_U = shared_U
 
         self.P = nn.Parameter(nn.init.xavier_uniform_(torch.empty(in_features, 1)))
         self.d = nn.Parameter(nn.init.xavier_uniform_(torch.empty(1, out_features)))
@@ -22,7 +21,7 @@ class SharedLinear(nn.Module):
             self.register_parameter("bias", None)
 
     def forward(self, x):
-        W = self.shared_U[:self.in_features, :self.out_features] + F.gelu(self.P @ self.d)
+        W = F.gelu(self.P @ self.d)
         x = x @ W
         if self.bias is not None:
             x = x + self.bias
@@ -85,40 +84,23 @@ class ConvolutionalAttention(nn.Module):
     """
     def __init__(self, channel_dim, kernel_size, dropout):
         super(ConvolutionalAttention, self).__init__()
-        self.channel_dim = channel_dim
-
-        self.channel_mix1 = nn.Conv1d(
-            in_channels=channel_dim,
-            out_channels=channel_dim//2,
-            kernel_size=1,
-            stride=1,
-            padding="same",
-            bias=True)
-
-        self.channel_mix2 = nn.Conv1d(
-            in_channels=channel_dim//2,
-            out_channels=channel_dim,
-            kernel_size=1,
-            stride=1,
-            padding="same",
-            bias=True)
 
         self.DWConv_qk = nn.Conv1d(
-            in_channels=channel_dim//2,
-            out_channels=2 * channel_dim//2,
+            in_channels=channel_dim,
+            out_channels=2 * channel_dim,
             kernel_size=kernel_size,
             stride=2,
-            groups=channel_dim//2,
+            groups=channel_dim,
             bias=True
         )
 
         self.DWConv_v = nn.Conv1d(
-            in_channels=channel_dim//2,
-            out_channels=channel_dim//2,
+            in_channels=channel_dim,
+            out_channels=channel_dim,
             kernel_size=1,
             stride=1,
             padding="same",
-            groups=channel_dim//2,
+            groups=channel_dim,
             bias=True
         )
 
@@ -126,18 +108,15 @@ class ConvolutionalAttention(nn.Module):
 
     def forward(self, x):
         # x: (B, C, D)
-        x = self.channel_mix1(x)  # (B, C/2, D)
 
         x_conv = self.DWConv_qk(x)  # (B, C, D)
-        Q, K = x_conv[:, 0::2, :], x_conv[:, 1::2, :]  # each: (B, C//2, D)
+        Q, K = x_conv[:, 0::2, :], x_conv[:, 1::2, :]  # each: (B, C, D)
 
-        V = self.DWConv_v(x)  # (B, C//2, D)
+        V = self.DWConv_v(x)  # (B, C, D)
 
         out = F.scaled_dot_product_attention(
             Q, K, V, dropout_p=self.dropout if self.training else 0.0
-        )  # (B, C//2, D)
-
-        out = self.channel_mix2(out)  # (B, C, D)
+        )  # (B, C, D)
 
         return out
 
@@ -147,7 +126,7 @@ class ConvAttentionBlock(nn.Module):
     Pre-norm residual block: a gated convolutional-attention sub-layer (HaDAM-style,
     attends across channels) followed by a VeraLinear FFN sub-layer.
     """
-    def __init__(self, channel_dim, seq_dim, shared_U,
+    def __init__(self, channel_dim, seq_dim,
                  attn_kernel_size, dropout=0.0):
         super(ConvAttentionBlock, self).__init__()
 
@@ -165,7 +144,6 @@ class ConvAttentionBlock(nn.Module):
         self.ffn = SharedLinear(
             in_features=self.seq_dim,
             out_features=self.seq_dim,
-            shared_U=shared_U,
             bias=True
         )
 
@@ -197,8 +175,8 @@ class Model(nn.Module):
         self.decomp = WaveletDecomp()
 
 
-        max_dim = max(self.seq_dim, self.seq_len //2, self.pred_len //2)
-        self.shared_U = nn.Parameter(nn.init.xavier_uniform_(torch.empty(max_dim, max_dim)))
+        # max_dim = max(self.seq_dim, self.seq_len //2, self.pred_len //2)
+        # self.shared_U = nn.Parameter(nn.init.xavier_uniform_(torch.empty(max_dim, max_dim)))
 
         
 
@@ -214,7 +192,6 @@ class Model(nn.Module):
         self.embed = SharedLinear(
             in_features=self.seq_len//2,
             out_features=self.seq_dim,
-            shared_U=self.shared_U,
             bias=True,
         )
 
@@ -222,7 +199,6 @@ class Model(nn.Module):
             ConvAttentionBlock(
                 channel_dim=2 * self.in_features,
                 seq_dim=self.seq_dim,
-                shared_U=self.shared_U,
                 attn_kernel_size=self.attn_kernel_size,
                 dropout=self.dropout,
             )
@@ -232,7 +208,6 @@ class Model(nn.Module):
         self.pred = SharedLinear(
             in_features=self.seq_dim,
             out_features=self.pred_len//2,
-            shared_U=self.shared_U,
             bias=True,
         )
 
