@@ -228,6 +228,30 @@ class ExpConfig(BaseModel):
         description="Enable plotting."
     )
 
+    d_pretrained: bool = Field(
+        False,
+        description=(
+            "Model loads its own fixed, pretrained weights internally and is never "
+            "trained locally (e.g. a foundation-model baseline like Chronos-2). When "
+            "true, Exp_Main skips building train/val loaders and never tries to load "
+            "a local checkpoint, regardless of d_is_training."
+        )
+    )
+
+    # -------------------------
+    # Online knowledge distillation
+    # -------------------------
+    d_kd_beta: float = Field(
+        0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Only used by the KD student. Interpolates the student's loss between "
+            "the teacher's (detached) prediction and ground truth: 0.0 = trained "
+            "purely on ground truth, 1.0 = trained purely to match the teacher."
+        )
+    )
+
     # --------------------------------
     # Allow CLI-style input: "0,1,2"
     # --------------------------------
