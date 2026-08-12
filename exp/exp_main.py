@@ -14,7 +14,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
 from data_provider.data_factory import TimeSeriesDataset
-from models import DLinear, HaDAM, MeanMedian, ModernTCN, Naive, PatchTST, SharedTST, SparseTSF, iTransformer, FrNet, FreqMoE, Vera
+from models import Chronos2, DLinear, MeanMedian, ModernTCN, Naive, PatchTST, SharedTST, SparseTSF, iTransformer, FrNet, FreqMoE, Vera
 from utils.learning_rates import adjust_learning_rate
 from utils.tools import EarlyStopping
 from utils.metrics import metric
@@ -31,7 +31,7 @@ class Exp_Main:
         self.args = args
         self.device = self._acquire_device()
 
-        if self.args.d_is_training:
+        if self.args.d_is_training and not self.args.d_pretrained:
             self.train_loader = self._get_data(flag='train')
             self.vali_loader = self._get_data(flag='val')
             self.test_loader = self._get_data(flag='test')
@@ -74,6 +74,7 @@ class Exp_Main:
         '''
         
         model_dict = {
+            'Chronos2': Chronos2,
             'DLinear': DLinear,
             'MeanMedian': MeanMedian,
             'Naive': Naive,
@@ -83,7 +84,6 @@ class Exp_Main:
             'ModernTCN': ModernTCN,
             'FrNet': FrNet,
             'FreqMoE': FreqMoE,
-            'HaDAM': HaDAM,
             'Vera': Vera,
             'SharedTST': SharedTST,
 
@@ -431,7 +431,7 @@ class Exp_Main:
         file and optionally plotted and saved as numpy arrays.
         '''
 
-        if not self.args.d_is_training:
+        if not self.args.d_is_training and not self.args.d_pretrained:
             print('loading model')
             self.model.load_state_dict(torch.load(os.path.join(self.args.d_checkpoint_path, setting, 'checkpoint.pth'), map_location="cpu"))
 
