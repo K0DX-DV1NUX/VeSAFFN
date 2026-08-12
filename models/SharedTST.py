@@ -12,9 +12,9 @@ class SharedLinear(nn.Module):
         super(SharedLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-
-        self.P = nn.Parameter(nn.init.xavier_uniform_(torch.empty(in_features, 1)))
-        self.d = nn.Parameter(nn.init.xavier_uniform_(torch.empty(1, out_features)))
+        rank = 10
+        self.P = nn.Parameter(nn.init.xavier_uniform_(torch.empty(in_features, rank)))
+        self.d = nn.Parameter(nn.init.xavier_uniform_(torch.empty(rank, out_features)))
         if bias:
             self.bias = nn.Parameter(nn.init.zeros_(torch.empty(self.out_features)))
         else:
