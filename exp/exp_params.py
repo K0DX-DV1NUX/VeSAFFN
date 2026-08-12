@@ -7,7 +7,7 @@ import torch
 
 from fvcore.nn import FlopCountAnalysis
 
-from models import DLinear, HaDAM, MeanMedian, ModernTCN, Naive, PatchTST, SharedTST, SparseTSF, iTransformer, FrNet, FreqMoE, Vera
+from models import DLinear, PatchTST, SharedTST, iTransformer, FrNet, Vera
 from utils.timefeatures import time_features
 
 
@@ -33,15 +33,9 @@ class Exp_Params:
     def _build_model(self):
         model_dict = {
             'DLinear': DLinear,
-            'MeanMedian': MeanMedian,
-            'Naive': Naive,
             'PatchTST': PatchTST,
-            'SparseTSF': SparseTSF,
             'iTransformer': iTransformer,
-            'ModernTCN': ModernTCN,
             'FrNet': FrNet,
-            'FreqMoE': FreqMoE,
-            'HaDAM': HaDAM,
             'Vera': Vera,
             'SharedTST': SharedTST,
         }

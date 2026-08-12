@@ -15,10 +15,8 @@ from exp.exp_params import Exp_Params
 # -------------------------------------------------
 MODEL_CONFIGS = {
     "DLinear": "scripts/DLinear/toml/model.toml",
-    "FreqMoE": "scripts/FreqMoE/toml/model.toml",
     "FrNet": "scripts/FrNet/toml/ETTh1.toml",
     "iTransformer": "scripts/iTransformer/toml/model.toml",
-    "ModernTCN": "scripts/ModernTCN/toml/model.toml",
     "PatchTST": "scripts/PatchTST/toml/model1.toml",
     "SharedTST": "scripts/SharedTST/toml/model.toml",
     "Vera": "scripts/Vera/toml/model.toml",
