@@ -89,13 +89,18 @@ class TimeSeriesDataset(Dataset):
             df_data = df_raw[[target_col]]
 
 
-        if self.is_training:
+        scaler_path = os.path.join(self.checkpoints_path, "scaler.pkl")
+
+        # A fixed/pretrained model (e.g. Chronos-2) is tested without ever
+        # training locally, so no scaler was fit and saved beforehand --
+        # fall back to fitting one here instead of requiring a prior run.
+        if self.is_training or not os.path.exists(scaler_path):
             train_data = df_data[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
-            joblib.dump(self.scaler, os.path.join(self.checkpoints_path, "scaler.pkl"))
+            joblib.dump(self.scaler, scaler_path)
 
-        else:                    
-            self.scaler = joblib.load(os.path.join(self.checkpoints_path, "scaler.pkl"))
+        else:
+            self.scaler = joblib.load(scaler_path)
 
         data = self.scaler.transform(df_data.values)
 
