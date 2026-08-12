@@ -12,9 +12,13 @@ m_revin_subtract_last = false
 m_seq_dim = 512   
 
 # Conv-attention blocks (HaDAM-style, cross-channel)
-m_num_blocks = 3
+m_num_blocks = 1
 m_attn_head_kernel_size = 32
 m_dropout = 0.1
+
+# Online KD (runKD.py / exp_kd.py): weight on the teacher vs. ground truth
+# in the student's loss. 0.0 = ground truth only, 1.0 = teacher only.
+d_kd_beta = 0.5
 
 
 # -------------------------
