@@ -1,0 +1,50 @@
+[default]
+# Model Information.
+d_model = "Chronos2"
+d_model_input_type = "x_only"
+
+# Chronos-2 is a fixed, pretrained zero-shot forecaster (see
+# models/Chronos2.py): it never trains locally, so d_is_training is off and
+# d_pretrained tells Exp_Main to skip both the train/val loaders and any
+# local checkpoint loading.
+d_is_training = 0
+d_pretrained = true
+
+
+# -------------------------
+# Datasets
+# -------------------------
+[[runs]]
+d_seq_len = 336
+d_pred_len = 48
+d_test_stride = 48
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 512
+d_test_stride = 512
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
