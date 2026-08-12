@@ -9,5 +9,5 @@ seaborn==0.13.2
 fvcore
 einops
 pydantic==2.12.5
-chronos-forecasting
+chronos-forecasting==2.3.1
 
