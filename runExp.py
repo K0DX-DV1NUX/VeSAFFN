@@ -35,8 +35,8 @@ def main():
     # Seed Values = 2021, 2022, 2023
     # 
     # -------------------------
-    for d_seed in range(2021, 2024):
-        for run in model_values["runs"]:
+    for run in model_values["runs"]:
+        for d_seed in range(2021, 2024):
 
             # -------------------------
             # Merged will allow to overide "default" settings, by settings in "runs".
