@@ -18,7 +18,6 @@ MODEL_CONFIGS = {
     "FrNet": "scripts/FrNet/toml/ETTh1.toml",
     "iTransformer": "scripts/iTransformer/toml/model.toml",
     "PatchTST": "scripts/PatchTST/toml/model1.toml",
-    "SharedTST": "scripts/SharedTST/toml/model.toml",
     "Vera": "scripts/Vera/toml/model.toml",
 }
 

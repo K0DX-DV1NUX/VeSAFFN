@@ -7,7 +7,7 @@ import torch
 
 from fvcore.nn import FlopCountAnalysis
 
-from models import DLinear, PatchTST, SharedTST, iTransformer, FrNet, Vera
+from models import DLinear, PatchTST, iTransformer, FrNet, Vera
 from utils.timefeatures import time_features
 
 
@@ -37,7 +37,6 @@ class Exp_Params:
             'iTransformer': iTransformer,
             'FrNet': FrNet,
             'Vera': Vera,
-            'SharedTST': SharedTST,
         }
 
         return model_dict[self.args.d_model].Model(self.args).float()

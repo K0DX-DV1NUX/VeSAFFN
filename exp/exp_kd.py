@@ -12,7 +12,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
 from data_provider.data_factory import TimeSeriesDataset
-from models import Chronos2, PatchTST, iTransformer, FrNet, Vera
+from models import Chronos2, DLinear, PatchTST, iTransformer, FrNet, Vera
 from utils.learning_rates import adjust_learning_rate
 from utils.metrics import metric
 
@@ -25,6 +25,7 @@ TEACHER_MODELS = {
     'PatchTST': PatchTST,
     'iTransformer': iTransformer,
     'FrNet': FrNet,
+    'DLinear': DLinear,
 }
 
 # Allowed offline KD teachers: everything online allows, plus Chronos-2,
@@ -142,7 +143,7 @@ def _forward(model, args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_cont
     Runs one model's forward pass and slices it to the forecast horizon.
     Teacher and student each use their own d_model_input_type, since a
     transformer-style teacher (e.g. iTransformer) may need the mark/dec
-    inputs a linear-style student (SharedTST) does not.
+    inputs a linear-style student (Vera) does not.
     '''
     model_input_args = _model_args(args.d_model_input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
@@ -202,9 +203,15 @@ class _EarlyStoppingKD:
 class Exp_KD:
     '''
     Online knowledge-distillation experiment: a teacher and a student model
-    train together, batch by batch, on the same data. Both are supervised
-    directly by ground truth; the student is additionally pulled toward the
-    teacher's (detached) prediction, with d_kd_beta controlling the mix.
+    train together, batch by batch, on the same data, through a single
+    joint optimizer. The loss is an unweighted sum of three terms:
+        L(gt, student) + L(gt, teacher) + L(teacher, student)
+    Ground truth supervises both models directly. The teacher-student term
+    is NOT detached on either side -- gradients from it flow into both
+    models at once, so this is genuine mutual learning: the teacher gets
+    pulled toward the student's predictions just as much as the student
+    gets pulled toward the teacher's, on top of each independently learning
+    from ground truth.
 
     Unlike Exp_Main, this class is driven by two configs -- teacher_args and
     student_args -- built from each model's own model.toml. Training-loop
@@ -251,21 +258,16 @@ class Exp_KD:
 
     def _kd_loss(self, teacher_out, student_out, batch_y, criterion):
         '''
-        Ground truth supervises both models directly; the student is also
-        pulled toward the teacher's (detached) prediction. d_kd_beta mixes
-        the two student terms: 0.0 = ground truth only, 1.0 = teacher only.
-        The teacher's own loss never sees the student's output, so gradients
-        from student_loss never flow back into the teacher.
+        All three terms are summed with equal weight. Neither side of the
+        teacher-student term is detached -- gradients from it flow into
+        both models, not just the student.
         '''
-        beta = self.student_args.d_kd_beta
-
-        teacher_loss = criterion(teacher_out, batch_y)
         student_gt_loss = criterion(student_out, batch_y)
-        student_kd_loss = criterion(student_out, teacher_out.detach())
-        student_loss = beta * student_kd_loss + (1 - beta) * student_gt_loss
+        teacher_gt_loss = criterion(teacher_out, batch_y)
+        teacher_student_loss = criterion(teacher_out, student_out)
 
-        total_loss = teacher_loss + student_loss
-        return total_loss, teacher_loss, student_loss
+        train_loss = student_gt_loss + teacher_gt_loss + teacher_student_loss
+        return train_loss, teacher_gt_loss, student_gt_loss, teacher_student_loss
 
     def vali(self, vali_loader, criterion):
         '''
@@ -340,15 +342,15 @@ class Exp_KD:
                 f_dim = -1 if self.student_args.d_forecast_type == 'MS' else 0
                 target = batch_y[:, -self.student_args.d_pred_len:, f_dim:].to(self.device)
 
-                loss, teacher_loss, student_loss = self._kd_loss(teacher_out, student_out, target, criterion)
+                loss, teacher_gt_loss, student_gt_loss, teacher_student_loss = self._kd_loss(teacher_out, student_out, target, criterion)
 
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.student_args.d_train_epochs - epoch) * train_steps - i)
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f} (teacher: {3:.7f}, student: {4:.7f})".format(
-                        i + 1, epoch + 1, loss.item(), teacher_loss.item(), student_loss.item()))
+                    print("\titers: {0}, epoch: {1} | loss: {2:.7f} (student_gt: {3:.7f}, teacher_gt: {4:.7f}, teacher_student: {5:.7f})".format(
+                        i + 1, epoch + 1, loss.item(), student_gt_loss.item(), teacher_gt_loss.item(), teacher_student_loss.item()))
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
                     time_now = time.time()
@@ -455,17 +457,6 @@ def _frozen_teacher_checkpoint_path(model_name):
     return os.path.join("scripts", model_name, "pre_trained", "checkpoint.pth")
 
 
-# Guards the adaptive-beta ratio's denominator against a division by ~0 in
-# the (rare) case the student's ground-truth loss is itself ~0.
-_ADAPTIVE_BETA_EPS = 1e-8
-
-# How large teacher_gt/student_gt has to get before beta fully saturates at
-# 1 (or, inverted, at 0): student 2x better/worse than teacher commits beta
-# fully to ground-truth-only/teacher-only, rather than asymptotically
-# approaching it forever. See _update_beta.
-_ADAPTIVE_BETA_SATURATION = 2.0
-
-
 class Exp_KD_Offline:
     '''
     Offline knowledge-distillation experiment: the teacher is fixed and
@@ -476,36 +467,15 @@ class Exp_KD_Offline:
     scripts/<Model>/pre_trained/checkpoint.pth. Only the student's
     parameters are ever optimized.
 
-    On the loss: the naive "L(gt, student) + L(student, teacher) +
-    L(gt, teacher)", summed and backpropagated, wastes its last term. Since
-    the teacher is frozen, L(gt, teacher) has zero gradient with respect to
-    every trainable parameter -- backpropagating it can only ever add a
-    constant to the reported loss value, never influence learning, while
-    still paying the memory cost of building an autograd graph through the
-    teacher for nothing. It's still computed (as teacher_gt_loss) and
-    reported every logging step, purely as a diagnostic of the fixed
-    teacher's own accuracy.
-
-    The optimized objective is:
-        beta * L(gt, student) + (1 - beta) * L(student, teacher.detach())
-
-    beta is *adaptive*, not the static d_kd_beta config value: it's
-    recomputed once per epoch (see train()) from that epoch's average
-    ground-truth losses,
-        beta = teacher_gt_loss / (teacher_gt_loss + student_gt_loss + eps)
-    so it rises toward 1 (train mostly on ground truth) as the student
-    approaches or beats the teacher, and falls toward 0 (lean on the
-    teacher) as the student falls further behind it. It's built entirely
-    from detached (.item()) scalars, so no gradient ever flows through it,
-    and it only updates between epochs -- never mid-epoch, which would make
-    it jitter with per-batch loss noise. d_kd_beta still matters as the seed
-    value for epoch 1, before any epoch-averaged losses exist yet.
-
-    Note beta's meaning here is the mirror image of Exp_KD (online)'s
-    static d_kd_beta, which weights the *teacher* term (1.0 = teacher only).
-    Here beta weights *ground truth* (1.0 = student alone is sufficient) --
-    intentional, not a bug; the two classes just read the same knob
-    differently.
+    The optimized objective is an unweighted sum of two terms:
+        L(gt, student) + L(student, teacher.detach())
+    teacher_gt_loss (L(gt, teacher)) is also computed and reported every
+    logging step, purely as a diagnostic of the fixed teacher's own
+    accuracy -- it is never added to the backpropagated loss. Since the
+    teacher is frozen, that term has zero gradient with respect to every
+    trainable parameter; including it would only add a constant to the
+    reported loss value while paying the memory cost of building an
+    autograd graph through the teacher for nothing.
     '''
 
     def __init__(self, teacher_args, student_args):
@@ -533,10 +503,6 @@ class Exp_KD_Offline:
 
         self.teacher = self._build_frozen_teacher().to(self.device)
         self.student = STUDENT_MODELS[student_args.d_model].Model(student_args).float().to(self.device)
-
-        # Seed value for epoch 1, before any epoch-averaged losses exist to
-        # compute the adaptive beta from -- see train() and the class docstring.
-        self.beta = student_args.d_kd_beta
 
     def _build_frozen_teacher(self):
         '''
@@ -574,16 +540,12 @@ class Exp_KD_Offline:
     def _kd_loss(self, teacher_out, student_out, batch_y, criterion):
         student_gt_loss = criterion(student_out, batch_y)
         student_kd_loss = criterion(student_out, teacher_out.detach())
-        train_loss = self.beta * student_gt_loss + (1 - self.beta) * student_kd_loss
+        train_loss = student_gt_loss + student_kd_loss
 
         teacher_gt_loss = criterion(teacher_out.detach(), batch_y)  # diagnostic only, not backpropagated
 
         return train_loss, teacher_gt_loss, student_gt_loss, student_kd_loss
 
-    def _update_beta(self, teacher_gt_avg, student_gt_avg):
-        #ratio = teacher_gt_avg / (student_gt_avg + _ADAPTIVE_BETA_EPS)
-        #self.beta = min(max(ratio / _ADAPTIVE_BETA_SATURATION, 1e-6), 1.0)
-        self.beta = 0.5
 
     def vali(self, vali_loader, criterion):
         '''
@@ -642,11 +604,6 @@ class Exp_KD_Offline:
         for epoch in range(self.student_args.d_train_epochs):
             iter_count = 0
             train_loss = []
-            # Accumulated to recompute beta once this epoch finishes -- see
-            # _update_beta and the class docstring. Plain floats (via
-            # .item() below), so beta never carries a gradient.
-            epoch_teacher_gt_losses = []
-            epoch_student_gt_losses = []
             self.student.train()
             epoch_time = time.time()
 
@@ -669,8 +626,6 @@ class Exp_KD_Offline:
                 loss, teacher_gt_loss, student_gt_loss, student_kd_loss = self._kd_loss(teacher_out, student_out, target, criterion)
 
                 train_loss.append(loss.item())
-                epoch_teacher_gt_losses.append(teacher_gt_loss.item())
-                epoch_student_gt_losses.append(student_gt_loss.item())
 
                 if (i + 1) % 100 == 0:
                     speed = (time.time() - time_now) / iter_count
@@ -700,15 +655,6 @@ class Exp_KD_Offline:
 
             print("\nEpoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
-
-            # Adaptive beta for the *next* epoch, from this epoch's average
-            # ground-truth losses -- see _update_beta and the class
-            # docstring. Deliberately after the epoch's batches, not during:
-            # recomputing it mid-epoch from single noisy batches would make
-            # it jitter instead of adapt.
-            old_beta = self.beta
-            self._update_beta(np.average(epoch_teacher_gt_losses), np.average(epoch_student_gt_losses))
-            print('beta: {:.4f} -> {:.4f}'.format(old_beta, self.beta))
 
             # No teacher= arg: the teacher never changes in offline mode, so
             # there's no point re-saving its (possibly hundreds of MB of)
