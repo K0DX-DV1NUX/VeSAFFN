@@ -22,3 +22,4 @@ d_forecast_type = "M"
 d_in_features = 7
 d_out_features = 7
 d_inverse_transform = false
+d_plot_results = false
