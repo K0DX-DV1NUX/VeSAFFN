@@ -264,10 +264,10 @@ class Exp_KD:
         '''
         student_gt_loss = criterion(student_out, batch_y)
         teacher_gt_loss = criterion(teacher_out, batch_y)
-        teacher_student_loss = criterion(teacher_out, student_out)
+        student_kd_loss = criterion(teacher_out.detach(), student_out)
 
-        train_loss = student_gt_loss + teacher_gt_loss + teacher_student_loss
-        return train_loss, teacher_gt_loss, student_gt_loss, teacher_student_loss
+        train_loss = student_gt_loss + teacher_gt_loss + student_kd_loss
+        return train_loss, teacher_gt_loss, student_gt_loss, student_kd_loss
 
     def vali(self, vali_loader, criterion):
         '''
@@ -453,8 +453,16 @@ class Exp_KD:
         return flat_preds, flat_trues
 
 
-def _frozen_teacher_checkpoint_path(model_name):
-    return os.path.join("scripts", model_name, "pre_trained", "checkpoint.pth")
+def _frozen_teacher_checkpoint_path(model_name, dataset, pred_len):
+    '''
+    A fixed teacher's checkpoint is keyed by (model, dataset, pred_len), not
+    just model: most architectures' output layer is shaped by pred_len and
+    their input width by the dataset's channel count, so a single flat
+    checkpoint per model can't cover the full run grid. See
+    scripts/promote_kd_checkpoints.py for populating this layout from a
+    normal (non-KD) training run.
+    '''
+    return os.path.join("scripts", model_name, "pre_trained", dataset, f"pl{pred_len}", "checkpoint.pth")
 
 
 class Exp_KD_Offline:
@@ -463,9 +471,9 @@ class Exp_KD_Offline:
     never trains here. It is either a genuinely pretrained, self-contained
     model (Chronos-2 -- see models/Chronos2.py, d_pretrained=true, which
     loads its own frozen weights internally) or a previously-trained
-    checkpoint for PatchTST/iTransformer/FrNet placed at
-    scripts/<Model>/pre_trained/checkpoint.pth. Only the student's
-    parameters are ever optimized.
+    checkpoint for PatchTST/iTransformer/FrNet/DLinear placed at
+    scripts/<Model>/pre_trained/<Dataset>/pl<PredLen>/checkpoint.pth. Only
+    the student's parameters are ever optimized.
 
     The optimized objective is an unweighted sum of two terms:
         L(gt, student) + L(student, teacher.detach())
@@ -509,21 +517,24 @@ class Exp_KD_Offline:
         Chronos-2 (d_pretrained=true) already loads its own fixed weights
         internally -- nothing more to do. Every other allowed teacher needs
         a locally-trained checkpoint placed at
-        scripts/<Model>/pre_trained/checkpoint.pth (see the module-level
-        docstring); this is where "fixing" a normally-trainable model like
-        PatchTST into a static offline teacher happens.
+        scripts/<Model>/pre_trained/<Dataset>/pl<PredLen>/checkpoint.pth
+        (see the module-level docstring and scripts/promote_kd_checkpoints.py);
+        this is where "fixing" a normally-trainable model like PatchTST into
+        a static offline teacher happens, for this exact (dataset, pred_len).
         '''
         args = self.teacher_args
         model = OFFLINE_TEACHER_MODELS[args.d_model].Model(args).float()
 
         if not args.d_pretrained:
-            checkpoint_path = _frozen_teacher_checkpoint_path(args.d_model)
+            checkpoint_path = _frozen_teacher_checkpoint_path(args.d_model, args.d_data, args.d_pred_len)
             if not os.path.exists(checkpoint_path):
                 raise FileNotFoundError(
-                    f"Offline KD needs a fixed teacher checkpoint for '{args.d_model}' at "
-                    f"'{checkpoint_path}' (or set d_pretrained=true in its model.toml for a "
-                    f"self-contained model like Chronos2). Train it normally first (e.g. via "
-                    f"runExp.py), then copy its checkpoints/<setting>/checkpoint.pth there."
+                    f"Offline KD needs a fixed teacher checkpoint for '{args.d_model}' on "
+                    f"'{args.d_data}' at pred_len={args.d_pred_len}, at '{checkpoint_path}' "
+                    f"(or set d_pretrained=true in its model.toml for a self-contained model "
+                    f"like Chronos2). Train it normally first for a single seed (e.g. "
+                    f"`python runExp.py ... --seed 2021`), then run "
+                    f"scripts/promote_kd_checkpoints.py to place its checkpoint there."
                 )
             model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
 
