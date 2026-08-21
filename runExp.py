@@ -15,7 +15,12 @@ def main():
     parser.add_argument("--data_config",type=str,required=True, help="Path to experiment TOML config for dataset.")
     parser.add_argument("--gpu_config", type=str, required=True, help="Path to experiment TOML config for gpu settings.")
     parser.add_argument("--model_config", type=str, required=True, help="Path to experiment TOML config for model settings.")
+    parser.add_argument("--seed", type=int, default=None,
+                         help="Run only this single seed instead of the default 2021-2023 sweep "
+                              "(e.g. for training a one-off fixed teacher checkpoint for offline KD).")
     args = parser.parse_args()
+
+    seeds = [args.seed] if args.seed is not None else range(2021, 2024)
 
     # -------------------------
     # Load Running Configurations.
@@ -32,11 +37,11 @@ def main():
 
     # -------------------------
     # Run Experiments.
-    # Seed Values = 2021, 2022, 2023
-    # 
+    # Seed Values = 2021, 2022, 2023 (or a single seed via --seed).
+    #
     # -------------------------
     for run in model_values["runs"]:
-        for d_seed in range(2021, 2024):
+        for d_seed in seeds:
 
             # -------------------------
             # Merged will allow to overide "default" settings, by settings in "runs".
