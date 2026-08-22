@@ -50,6 +50,7 @@ class Model(nn.Module):
 
         self.seq_dim = configs.m_seq_dim
         self.use_norm = configs.m_use_norm
+        self.n_mid_layers = getattr(configs, "m_n_mid_layers", 1)
 
         self.vera_rank = getattr(configs, "m_vera_rank", 16)
 
@@ -68,7 +69,7 @@ class Model(nn.Module):
         else:
             self.revin = None
 
-        self.layer_1 = nn.Sequential(
+        self.start_layer = nn.Sequential(
             VeraLinear(
                 in_features=self.seq_len,
                 out_features=self.seq_dim,
@@ -77,9 +78,11 @@ class Model(nn.Module):
                 rank=self.vera_rank
             ),
             nn.GELU(),
+            nn.LayerNorm(self.seq_dim),
         )
 
-        self.conv_layers = nn.Sequential(
+        self.mid_layer = nn.Sequential(
+            nn.LayerNorm(self.seq_dim),
             nn.Conv1d(
                 self.in_features,
                 self.in_features,
@@ -88,10 +91,18 @@ class Model(nn.Module):
                 padding="same",
                 groups=self.in_features
             ),
-            nn.GELU(),
+            VeraLinear(
+                in_features=self.seq_dim,
+                out_features=self.seq_dim,
+                shared_pa=self.shared_pa,
+                shared_pb=self.shared_pb,
+                rank=self.vera_rank
+            ),
+            nn.GELU()
         )
 
-        self.layer_2 = nn.Sequential(
+        self.final_layer = nn.Sequential(
+            nn.LayerNorm(self.seq_dim),
             VeraLinear(
                 in_features=self.seq_dim,
                 out_features=self.pred_len,
@@ -109,13 +120,14 @@ class Model(nn.Module):
 
         x = x.permute(0, 2, 1)
 
-        x = self.layer_1(x)
-        x = self.conv_layers(x)
+        x = self.start_layer(x)
+        for _ in range(self.n_mid_layers):
+            x = x + self.mid_layer(x)
         # Stashed as a side effect (not part of the return value) so KD orchestration
         # code can read it for feature-level distillation without changing this
         # forward() signature. Shape: [B, in_features, seq_dim].
         self._kd_feature = x
-        out = self.layer_2(x)
+        out = self.final_layer(x)
 
         out = out.permute(0, 2, 1)
         if self.use_norm:
