@@ -7,11 +7,11 @@ d_model_input_type = "x_only"
 m_use_norm = true
 
 # Shared VeRA basis
-m_seq_dim = 128        # hidden dim seq_len -> seq_dim -> pred_len
-m_vera_rank = 16        # shared low-rank basis size for VeraLinear
+m_seq_dim = 512        # hidden dim seq_len -> seq_dim -> pred_len
+m_vera_rank = 32        # shared low-rank basis size for VeraLinear
 
 # Depthwise conv smoothing (applied over the seq_dim axis)
-m_dwconv_kernel_size = 3
+m_dwconv_kernel_size = 64
 
 
 # -------------------------
