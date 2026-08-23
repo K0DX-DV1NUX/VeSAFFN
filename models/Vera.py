@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 from layers.RevIN import RevIN
+from models.DLinear import series_decomp, moving_avg
 
 class VeraLinear(nn.Module):
     """
@@ -47,10 +48,10 @@ class Model(nn.Module):
         self.pred_len = configs.d_pred_len
         self.in_features = configs.d_in_features
         self.out_features = configs.d_out_features
+        
 
         self.seq_dim = configs.m_seq_dim
         self.use_norm = configs.m_use_norm
-        self.n_mid_layers = getattr(configs, "m_n_mid_layers", 1)
 
         self.vera_rank = getattr(configs, "m_vera_rank", 16)
 
@@ -69,6 +70,9 @@ class Model(nn.Module):
         else:
             self.revin = None
 
+        kernel_size = 25
+        self.decomp = series_decomp(kernel_size)
+
         self.start_layer = nn.Sequential(
             VeraLinear(
                 in_features=self.seq_len,
@@ -77,19 +81,16 @@ class Model(nn.Module):
                 shared_pb=self.shared_pb,
                 rank=self.vera_rank
             ),
-            nn.GELU(),
-            nn.LayerNorm(self.seq_dim),
         )
 
         self.mid_layer = nn.Sequential(
-            nn.LayerNorm(self.seq_dim),
             nn.Conv1d(
-                self.in_features,
-                self.in_features,
+                2 * self.in_features,
+                2 * self.in_features,
                 kernel_size=configs.m_dwconv_kernel_size,
                 stride=1,
                 padding="same",
-                groups=self.in_features
+                groups=2 * self.in_features
             ),
             VeraLinear(
                 in_features=self.seq_dim,
@@ -98,7 +99,7 @@ class Model(nn.Module):
                 shared_pb=self.shared_pb,
                 rank=self.vera_rank
             ),
-            nn.GELU()
+            nn.GELU(),
         )
 
         self.final_layer = nn.Sequential(
@@ -118,16 +119,20 @@ class Model(nn.Module):
         else:
             x = x_enc
 
-        x = x.permute(0, 2, 1)
-
-        x = self.start_layer(x)
-        for _ in range(self.n_mid_layers):
-            x = x + self.mid_layer(x)
+        # x = x.permute(0, 2, 1)
+        seasonal, trend = self.decomp(x)
+        seasonal, trend = seasonal.permute(0,2,1), trend.permute(0,2,1)
+        x1 = torch.concat([seasonal, trend], dim=1)
+        x1 = self.start_layer(x1)
+        x1 = self.mid_layer(x1)
         # Stashed as a side effect (not part of the return value) so KD orchestration
         # code can read it for feature-level distillation without changing this
         # forward() signature. Shape: [B, in_features, seq_dim].
         self._kd_feature = x
-        out = self.final_layer(x)
+        x1 = self.final_layer(x1)
+
+        seasonal_out, trend_out = torch.split(x1, self.in_features, dim=1)
+        out = seasonal_out + trend_out
 
         out = out.permute(0, 2, 1)
         if self.use_norm:
