@@ -1,7 +1,7 @@
 #!/bin/sh
 
-student_config="scripts/Vera/toml/model1.toml"
-student_config="scripts/Vera/toml/model2.toml"
+student_config1="scripts/Vera/toml/model1.toml"
+student_config2="scripts/Vera/toml/model2.toml"
 teacher_config="scripts/iTransformer/toml/model.toml"
 data_config="scripts/defaults/"
 gpu_config="scripts/defaults/gpu.toml"
