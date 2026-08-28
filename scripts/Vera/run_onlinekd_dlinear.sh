@@ -18,6 +18,6 @@ python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/SOLTX.to
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/SOLAL.toml" --kd_mode online --teacher_config $teacher_config --student_config $student_config2
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/WTH.toml" --kd_mode online --teacher_config $teacher_config --student_config $student_config2
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ELT.toml" --kd_mode online --teacher_config $teacher_config --student_config $student_config2
-python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/TRF.toml" --kd_mode online --teacher_config $teacher_config --student_config $student_config2
+# python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/TRF.toml" --kd_mode online --teacher_config $teacher_config --student_config $student_config2
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/METRLA.toml" --kd_mode online --teacher_config $teacher_config --student_config $student_config2
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/PEMSBAY.toml" --kd_mode online --teacher_config $teacher_config --student_config $student_config2
