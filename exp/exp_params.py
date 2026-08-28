@@ -124,6 +124,11 @@ class Exp_Params:
                     trainable_params += p.numel()
                 if id(m) in fired:
                     active_params += p.numel()
+            # Buffers (e.g. fixed rotation matrices, running stats) hold no
+            # gradient and aren't parameters, but they're live tensors on
+            # device and belong in the model's memory footprint.
+            for b in m.buffers(recurse=False):
+                size_bytes += b.numel() * b.element_size()
 
         flops_analysis = FlopCountAnalysis(self.model, inputs)
         flops_analysis.unsupported_ops_warnings(False)
