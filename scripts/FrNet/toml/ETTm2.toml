@@ -29,13 +29,6 @@ m_subtract_last = false
 # -------------------------
 [[runs]]
 d_seq_len = 336
-d_pred_len = 48
-d_test_stride = 48
-m_global_freq_pred = 1
-m_period_list = [96, 48]
-
-[[runs]]
-d_seq_len = 336
 d_pred_len = 96
 d_test_stride = 96
 m_global_freq_pred = 1
@@ -52,13 +45,6 @@ m_period_list = [96, 48, 24, 12]
 d_seq_len = 336
 d_pred_len = 336
 d_test_stride = 336
-m_global_freq_pred = 0
-m_period_list = [96, 48, 12]
-
-[[runs]]
-d_seq_len = 336
-d_pred_len = 512
-d_test_stride = 512
 m_global_freq_pred = 0
 m_period_list = [96, 48, 12]
 

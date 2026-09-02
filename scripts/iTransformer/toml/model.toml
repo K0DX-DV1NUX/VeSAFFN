@@ -22,11 +22,6 @@ m_activation = "gelu"
 # -------------------------
 [[runs]]
 d_seq_len = 336
-d_pred_len = 48
-d_test_stride = 48
-
-[[runs]]
-d_seq_len = 336
 d_pred_len = 96
 d_test_stride = 96
 
@@ -41,14 +36,6 @@ d_pred_len = 336
 m_d_model = 512
 m_d_ff = 512
 d_test_stride = 336
-
-[[runs]]
-d_seq_len = 336
-d_pred_len = 512
-m_d_model = 512
-m_d_ff = 512
-d_test_stride = 512
-
 
 [[runs]]
 d_seq_len = 336
