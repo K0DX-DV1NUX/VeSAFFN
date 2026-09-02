@@ -264,7 +264,7 @@ class Exp_KD:
         '''
         student_gt_loss = criterion(student_out, batch_y)
         teacher_gt_loss = criterion(teacher_out, batch_y)
-        student_kd_loss = criterion(teacher_out.detach(), student_out)
+        student_kd_loss = criterion(teacher_out, student_out)
 
         train_loss = student_gt_loss + teacher_gt_loss + student_kd_loss
         return train_loss, teacher_gt_loss, student_gt_loss, student_kd_loss
