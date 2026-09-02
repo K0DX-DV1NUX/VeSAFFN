@@ -112,23 +112,39 @@ class Exp_Params:
             for handle in handles:
                 handle.remove()
 
+        # A Parameter/buffer shared across submodules (e.g. Vera's shared_pa/
+        # shared_pb, re-registered on every VeraLinear that holds a
+        # reference) must only be counted once -- dedupe by tensor identity
+        # rather than by owning module.
         total_params = 0
         trainable_params = 0
-        active_params = 0
         size_bytes = 0
+        seen_param_ids = set()
+        seen_buffer_ids = set()
+        active_param_ids = set()
+        params_by_id = {}
         for m in self.model.modules():
             for p in m.parameters(recurse=False):
-                total_params += p.numel()
-                size_bytes += p.numel() * p.element_size()
-                if p.requires_grad:
-                    trainable_params += p.numel()
+                pid = id(p)
+                if pid not in seen_param_ids:
+                    seen_param_ids.add(pid)
+                    params_by_id[pid] = p
+                    total_params += p.numel()
+                    size_bytes += p.numel() * p.element_size()
+                    if p.requires_grad:
+                        trainable_params += p.numel()
                 if id(m) in fired:
-                    active_params += p.numel()
+                    active_param_ids.add(pid)
             # Buffers (e.g. fixed rotation matrices, running stats) hold no
             # gradient and aren't parameters, but they're live tensors on
             # device and belong in the model's memory footprint.
             for b in m.buffers(recurse=False):
-                size_bytes += b.numel() * b.element_size()
+                bid = id(b)
+                if bid not in seen_buffer_ids:
+                    seen_buffer_ids.add(bid)
+                    size_bytes += b.numel() * b.element_size()
+
+        active_params = sum(params_by_id[pid].numel() for pid in active_param_ids)
 
         flops_analysis = FlopCountAnalysis(self.model, inputs)
         flops_analysis.unsupported_ops_warnings(False)
