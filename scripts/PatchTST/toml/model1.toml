@@ -3,7 +3,7 @@ d_model = "PatchTST"
 d_model_input_type = "x_only"
 
 # PatchTST params
-m_individual = 1
+m_individual = 0
 m_e_layers = 3
 m_n_heads = 4
 m_d_model = 16
