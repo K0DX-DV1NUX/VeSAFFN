@@ -10,8 +10,8 @@ m_individual = true
 
 
 # Shared VeRA basis
-m_seq_dim = 256        # hidden dim seq_len//2 -> seq_dim -> pred_len//2
-m_vera_rank = 32        # shared low-rank basis size for VeraLinear
+m_seq_dim = 256
+m_vera_rank = 64
 
 # -------------------------
 # Datasets

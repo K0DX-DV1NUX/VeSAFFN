@@ -8,15 +8,9 @@ d_kd_teacher_warmup_epochs = 10
 m_use_norm = true
 m_individual = false
 
-# Online KD: let the teacher train alone for the first N epochs before the
-# KD term and the student's own training kick in (see Exp_KD.train). Only
-# read by online KD -- offline KD's teacher is already fixed, so this is
-# ignored there.
-
-
 # Shared VeRA basis
-m_seq_dim = 256        # hidden dim seq_len//2 -> seq_dim -> pred_len//2
-m_vera_rank = 16        # shared low-rank basis size for VeraLinear
+m_seq_dim = 256
+m_vera_rank = 16
 
 
 # -------------------------
