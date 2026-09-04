@@ -218,6 +218,13 @@ class Exp_KD:
     level settings (batch size, epochs, dataset, learning rate, ...) are
     guaranteed identical between the two by construction (see runKD.py) and
     are read from student_args throughout.
+
+    Optional teacher warm-up: if student_args.d_kd_teacher_warmup_epochs is
+    set (default 0, i.e. today's "cold start" -- joint training from epoch
+    0), the first N epochs train the teacher alone on L(gt, teacher); the
+    student and the KD term sit out entirely (no forward pass, no
+    validation, no early stopping) until the teacher has had a chance to
+    reach its own accuracy. See train() for the epoch-level branch.
     '''
 
     def __init__(self, teacher_args, student_args):
@@ -317,10 +324,22 @@ class Exp_KD:
                                             epochs=self.student_args.d_train_epochs,
                                             max_lr=self.student_args.d_learning_rate)
 
+        # Teacher warm-up: for the first `warmup_epochs` epochs, only the
+        # teacher trains (on L(gt, teacher)); the student and the KD term
+        # sit out entirely. Defaults to 0 -- unset in a toml, this is
+        # exactly today's cold-start joint training.
+        warmup_epochs = int(getattr(self.student_args, "d_kd_teacher_warmup_epochs", 0))
+        if warmup_epochs >= self.student_args.d_train_epochs:
+            print(f"Warning: d_kd_teacher_warmup_epochs ({warmup_epochs}) >= d_train_epochs "
+                  f"({self.student_args.d_train_epochs}); clamping so at least 1 epoch of "
+                  f"joint KD training runs.")
+            warmup_epochs = max(0, self.student_args.d_train_epochs - 1)
+
         self.teacher.train()
         self.student.train()
 
         for epoch in range(self.student_args.d_train_epochs):
+            in_warmup = epoch < warmup_epochs
             iter_count = 0
             train_loss = []
             self.teacher.train()
@@ -337,20 +356,30 @@ class Exp_KD:
                 amp_context = torch.cuda.amp.autocast() if self.student_args.d_use_amp else nullcontext()
 
                 teacher_out = _forward(self.teacher, self.teacher_args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_context)
-                student_out = _forward(self.student, self.student_args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_context)
 
                 f_dim = -1 if self.student_args.d_forecast_type == 'MS' else 0
                 target = batch_y[:, -self.student_args.d_pred_len:, f_dim:].to(self.device)
 
-                loss, teacher_gt_loss, student_gt_loss, teacher_student_loss = self._kd_loss(teacher_out, student_out, target, criterion)
+                if in_warmup:
+                    # No student forward, no KD term -- the student is
+                    # untouched until the teacher's warm-up finishes.
+                    loss = teacher_gt_loss = criterion(teacher_out, target)
+                    student_gt_loss = teacher_student_loss = None
+                else:
+                    student_out = _forward(self.student, self.student_args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_context)
+                    loss, teacher_gt_loss, student_gt_loss, teacher_student_loss = self._kd_loss(teacher_out, student_out, target, criterion)
 
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.student_args.d_train_epochs - epoch) * train_steps - i)
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f} (student_gt: {3:.7f}, teacher_gt: {4:.7f}, teacher_student: {5:.7f})".format(
-                        i + 1, epoch + 1, loss.item(), student_gt_loss.item(), teacher_gt_loss.item(), teacher_student_loss.item()))
+                    if in_warmup:
+                        print("\t[teacher warm-up {0}/{1}] iters: {2}, epoch: {3} | teacher_gt loss: {4:.7f}".format(
+                            epoch + 1, warmup_epochs, i + 1, epoch + 1, teacher_gt_loss.item()))
+                    else:
+                        print("\titers: {0}, epoch: {1} | loss: {2:.7f} (student_gt: {3:.7f}, teacher_gt: {4:.7f}, teacher_student: {5:.7f})".format(
+                            i + 1, epoch + 1, loss.item(), student_gt_loss.item(), teacher_gt_loss.item(), teacher_student_loss.item()))
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
                     time_now = time.time()
@@ -369,16 +398,24 @@ class Exp_KD:
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
-            vali_loss = self.vali(self.vali_loader, criterion)
-            test_loss = self.vali(self.test_loader, criterion)
 
-            print("\nEpoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
-                epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+            if in_warmup:
+                # Student hasn't trained yet -- skip validation/early
+                # stopping so the warm-up window doesn't eat into the
+                # patience budget meant for the joint phase.
+                print("\nEpoch: {0}, Steps: {1} | Teacher warm-up Train Loss: {2:.7f}".format(
+                    epoch + 1, train_steps, train_loss))
+            else:
+                vali_loss = self.vali(self.vali_loader, criterion)
+                test_loss = self.vali(self.test_loader, criterion)
 
-            early_stopping(vali_loss, self.student, path, teacher=self.teacher)
-            if early_stopping.early_stop:
-                print("Early stopping")
-                break
+                print("\nEpoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
+                    epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+
+                early_stopping(vali_loss, self.student, path, teacher=self.teacher)
+                if early_stopping.early_stop:
+                    print("Early stopping")
+                    break
 
             if self.student_args.d_lradj != 'TST':
                 adjust_learning_rate(model_optim, scheduler, epoch + 1, self.student_args)
@@ -550,7 +587,7 @@ class Exp_KD_Offline:
 
     def _kd_loss(self, teacher_out, student_out, batch_y, criterion):
         student_gt_loss = criterion(student_out, batch_y)
-        student_kd_loss = criterion(student_out, teacher_out.detach())
+        student_kd_loss = criterion(student_out, teacher_out)
         train_loss = student_gt_loss + student_kd_loss
 
         teacher_gt_loss = criterion(teacher_out.detach(), batch_y)  # diagnostic only, not backpropagated
