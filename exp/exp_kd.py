@@ -203,8 +203,9 @@ class _EarlyStoppingKD:
 class Exp_KD:
     '''
     Online knowledge-distillation experiment: a teacher and a student model
-    train together, batch by batch, on the same data, through a single
-    joint optimizer. The loss is an unweighted sum of three terms:
+    train together, batch by batch, on the same data, each through its own
+    optimizer stepped from one shared backward pass. The loss is an
+    unweighted sum of three terms:
         L(gt, student) + L(gt, teacher) + L(teacher, student)
     Ground truth supervises both models directly. The teacher-student term
     is NOT detached on either side -- gradients from it flow into both
@@ -225,6 +226,15 @@ class Exp_KD:
     student and the KD term sit out entirely (no forward pass, no
     validation, no early stopping) until the teacher has had a chance to
     reach its own accuracy. See train() for the epoch-level branch.
+
+    The teacher and student each get their own OneCycleLR schedule rather
+    than sharing one. The teacher's spans the full d_train_epochs (it
+    trains every epoch, warm-up included). The student's spans only
+    d_train_epochs - warmup_epochs and starts counting from the first
+    joint-training epoch, so when the student joins the loss it begins at
+    the same base_lr the teacher began at, instead of inheriting whatever
+    LR a single shared schedule would already have decayed to after the
+    warm-up epochs.
     '''
 
     def __init__(self, teacher_args, student_args):
@@ -256,12 +266,20 @@ class Exp_KD:
 
     def _select_optimizer(self):
         '''
-        A single joint optimizer over both models' parameters -- this is
-        what makes the distillation "online": the teacher keeps learning
-        from ground truth in the same step that the student learns from it.
+        Separate optimizers per model, each stepped from the same combined
+        loss -- this is what makes the distillation "online": the teacher
+        keeps learning from ground truth in the same step that the student
+        learns from it. Kept separate (rather than one optimizer over both
+        models' params) so each model can run its own learning-rate
+        schedule: the teacher trains for the whole run and its schedule
+        should span all of d_train_epochs, while the student only starts
+        training once the teacher's warm-up ends and needs its own
+        schedule to start from base_lr at that point instead of picking up
+        wherever the teacher's schedule happens to be (see train()).
         '''
-        params = list(self.teacher.parameters()) + list(self.student.parameters())
-        return optim.Adam(params, lr=self.student_args.d_learning_rate)
+        teacher_optim = optim.Adam(self.teacher.parameters(), lr=self.student_args.d_learning_rate)
+        student_optim = optim.Adam(self.student.parameters(), lr=self.student_args.d_learning_rate)
+        return teacher_optim, student_optim
 
     def _kd_loss(self, teacher_out, student_out, batch_y, criterion):
         '''
@@ -312,17 +330,11 @@ class Exp_KD:
         train_steps = len(self.train_loader)
         early_stopping = _EarlyStoppingKD(patience=self.student_args.d_patience, verbose=True)
 
-        model_optim = self._select_optimizer()
+        teacher_optim, student_optim = self._select_optimizer()
         criterion = _select_criterion(self.student_args)
 
         if self.student_args.d_use_amp:
             scaler = torch.cuda.amp.GradScaler()
-
-        scheduler = lr_scheduler.OneCycleLR(optimizer=model_optim,
-                                            steps_per_epoch=train_steps,
-                                            pct_start=self.student_args.d_pct_start,
-                                            epochs=self.student_args.d_train_epochs,
-                                            max_lr=self.student_args.d_learning_rate)
 
         # Teacher warm-up: for the first `warmup_epochs` epochs, only the
         # teacher trains (on L(gt, teacher)); the student and the KD term
@@ -334,6 +346,23 @@ class Exp_KD:
                   f"({self.student_args.d_train_epochs}); clamping so at least 1 epoch of "
                   f"joint KD training runs.")
             warmup_epochs = max(0, self.student_args.d_train_epochs - 1)
+
+        # The teacher's schedule spans the whole run (it trains every
+        # epoch, warm-up included). The student's schedule spans only the
+        # epochs it actually trains for -- it is stepped for the first
+        # time on the first joint-training epoch, so it starts at the same
+        # base_lr the teacher started at, instead of inheriting whatever
+        # LR the teacher's schedule has decayed to by then.
+        teacher_scheduler = lr_scheduler.OneCycleLR(optimizer=teacher_optim,
+                                            steps_per_epoch=train_steps,
+                                            pct_start=self.student_args.d_pct_start,
+                                            epochs=self.student_args.d_train_epochs,
+                                            max_lr=self.student_args.d_learning_rate)
+        student_scheduler = lr_scheduler.OneCycleLR(optimizer=student_optim,
+                                            steps_per_epoch=train_steps,
+                                            pct_start=self.student_args.d_pct_start,
+                                            epochs=self.student_args.d_train_epochs - warmup_epochs,
+                                            max_lr=self.student_args.d_learning_rate)
 
         self.teacher.train()
         self.student.train()
@@ -349,7 +378,8 @@ class Exp_KD:
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(self.train_loader):
                 iter_count += 1
 
-                model_optim.zero_grad(set_to_none=True)
+                teacher_optim.zero_grad(set_to_none=True)
+                student_optim.zero_grad(set_to_none=True)
 
                 batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = _get_inputs(self.device, self.student_args, batch_x, batch_y, batch_x_mark, batch_y_mark)
 
@@ -386,15 +416,23 @@ class Exp_KD:
 
                 if self.student_args.d_use_amp:
                     scaler.scale(loss).backward()
-                    scaler.step(model_optim)
+                    scaler.step(teacher_optim)
+                    if not in_warmup:
+                        scaler.step(student_optim)
                     scaler.update()
                 else:
                     loss.backward()
-                    model_optim.step()
+                    teacher_optim.step()
+                    if not in_warmup:
+                        student_optim.step()
 
                 if self.student_args.d_lradj == 'TST':
-                    adjust_learning_rate(model_optim, scheduler, epoch + 1, self.student_args, printout=False)
-                    scheduler.step()
+                    adjust_learning_rate(teacher_optim, teacher_scheduler, epoch + 1, self.student_args, printout=False)
+                    teacher_scheduler.step()
+                    if not in_warmup:
+                        student_epoch = epoch - warmup_epochs + 1
+                        adjust_learning_rate(student_optim, student_scheduler, student_epoch, self.student_args, printout=False)
+                        student_scheduler.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
@@ -418,9 +456,16 @@ class Exp_KD:
                     break
 
             if self.student_args.d_lradj != 'TST':
-                adjust_learning_rate(model_optim, scheduler, epoch + 1, self.student_args)
+                adjust_learning_rate(teacher_optim, teacher_scheduler, epoch + 1, self.student_args, printout=False)
+                print('Updating teacher learning rate to {}'.format(teacher_optim.param_groups[0]['lr']))
+                if not in_warmup:
+                    student_epoch = epoch - warmup_epochs + 1
+                    adjust_learning_rate(student_optim, student_scheduler, student_epoch, self.student_args, printout=False)
+                    print('Updating student learning rate to {}'.format(student_optim.param_groups[0]['lr']))
             else:
-                print('Updating learning rate to {}'.format(scheduler.get_last_lr()[0]))
+                print('Updating teacher learning rate to {}'.format(teacher_scheduler.get_last_lr()[0]))
+                if not in_warmup:
+                    print('Updating student learning rate to {}'.format(student_scheduler.get_last_lr()[0]))
 
         best_model_path = path + '/' + 'checkpoint.pth'
         checkpoint = torch.load(best_model_path, map_location="cpu")
