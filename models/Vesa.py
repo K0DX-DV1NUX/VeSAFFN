@@ -4,9 +4,9 @@ import torch.nn as nn
 from layers.RevIN import RevIN
 
 
-class VeraLinear(nn.Module):
+class VesaLinear(nn.Module):
     def __init__(self, in_features, out_features, shared_pa, shared_pb, bias=True, rank=None):
-        super(VeraLinear, self).__init__()
+        super(VesaLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.shared_pa = shared_pa
@@ -32,9 +32,9 @@ class VeraLinear(nn.Module):
         return x
 
 
-class VeraLinearChannelwise(nn.Module):
+class VesaLinearChannelwise(nn.Module):
     def __init__(self, in_features, out_features, num_channels, shared_pa, shared_pb, bias=True, rank=None):
-        super(VeraLinearChannelwise, self).__init__()
+        super(VesaLinearChannelwise, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.num_channels = num_channels
@@ -75,13 +75,13 @@ class Model(nn.Module):
         self.m_individual = getattr(configs, "m_individual", False)
         self.seq_dim = getattr(configs, "m_seq_dim", 128)
         self.use_norm = getattr(configs, "m_use_norm", True)
-        self.vera_rank = getattr(configs, "m_vera_rank", 16)
+        self.vesa_rank = getattr(configs, "m_vesa_rank", 16)
 
         self.seq_len_half = self.seq_len // 2
         self.pred_len_half = self.pred_len // 2
 
-        Pa = torch.empty(max(self.seq_len_half, self.seq_dim), self.vera_rank)
-        Pb = torch.empty(self.vera_rank, max(self.seq_dim, self.pred_len_half))
+        Pa = torch.empty(max(self.seq_len_half, self.seq_dim), self.vesa_rank)
+        Pb = torch.empty(self.vesa_rank, max(self.seq_dim, self.pred_len_half))
 
         nn.init.xavier_uniform_(Pa)
         nn.init.xavier_uniform_(Pb)
@@ -95,38 +95,38 @@ class Model(nn.Module):
             self.revin = None
 
         if self.m_individual:
-            self.layer1 = VeraLinearChannelwise(
+            self.layer1 = VesaLinearChannelwise(
                 in_features=self.seq_len_half,
                 out_features=self.seq_dim,
                 num_channels=2 * self.in_features,
                 shared_pa=self.shared_pa,
                 shared_pb=self.shared_pb,
-                rank=self.vera_rank,
+                rank=self.vesa_rank,
             )
             self.act = nn.GELU()
-            self.layer2 = VeraLinearChannelwise(
+            self.layer2 = VesaLinearChannelwise(
                 in_features=self.seq_dim,
                 out_features=self.pred_len_half,
                 num_channels=2 * self.in_features,
                 shared_pa=self.shared_pa,
                 shared_pb=self.shared_pb,
-                rank=self.vera_rank,
+                rank=self.vesa_rank,
             )
         else:
-            self.layer1 = VeraLinear(
+            self.layer1 = VesaLinear(
                 in_features=self.seq_len_half,
                 out_features=self.seq_dim,
                 shared_pa=self.shared_pa,
                 shared_pb=self.shared_pb,
-                rank=self.vera_rank
+                rank=self.vesa_rank
             )
             self.act = nn.GELU()
-            self.layer2 = VeraLinear(
+            self.layer2 = VesaLinear(
                 in_features=self.seq_dim,
                 out_features=self.pred_len_half,
                 shared_pa=self.shared_pa,
                 shared_pb=self.shared_pb,
-                rank=self.vera_rank
+                rank=self.vesa_rank
             )
 
     def forward(self, x_enc, x_mark_enc=None, x_dec=None, x_mark_dec=None, mask=None):

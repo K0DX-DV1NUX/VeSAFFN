@@ -1,7 +1,7 @@
 #!/bin/sh
 
-model_config1="scripts/Vera/toml/model1.toml"
-model_config2="scripts/Vera/toml/model2.toml"
+model_config1="scripts/Vesa/toml/model1.toml"
+model_config2="scripts/Vesa/toml/model2.toml"
 data_config="scripts/defaults/"
 gpu_config="scripts/defaults/gpu.toml"
 

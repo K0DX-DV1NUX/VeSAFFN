@@ -24,7 +24,7 @@ def _load_pipeline():
     if os.path.exists(os.path.join(PRETRAINED_LOCAL_DIR, "config.json")):
         return Chronos2Pipeline.from_pretrained(PRETRAINED_LOCAL_DIR)
 
-    pipeline = Chronos2Pipeline.from_pretrained(PRETRAINED_MODEL_ID)
+    pipeline = Chronos2Pipeline.from_pretrained(PRETRAINED_MODEL_ID, device_map="cuda")
     os.makedirs(PRETRAINED_LOCAL_DIR, exist_ok=True)
     pipeline.save_pretrained(PRETRAINED_LOCAL_DIR)
     return pipeline

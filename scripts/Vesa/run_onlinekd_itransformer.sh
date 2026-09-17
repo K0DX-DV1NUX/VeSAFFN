@@ -1,10 +1,11 @@
 #!/bin/sh
 
-student_config1="scripts/Vera/toml/model1.toml"
-student_config2="scripts/Vera/toml/model2.toml"
-teacher_config="scripts/DLinear/toml/model.toml"
+student_config1="scripts/Vesa/toml/model1.toml"
+student_config2="scripts/Vesa/toml/model2.toml"
+teacher_config="scripts/iTransformer/toml/model.toml"
 data_config="scripts/defaults/"
 gpu_config="scripts/defaults/gpu.toml"
+
 
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ETTh1.toml" --kd_mode online --teacher_config $teacher_config --student_config $student_config1
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ETTh2.toml" --kd_mode online --teacher_config $teacher_config --student_config $student_config1

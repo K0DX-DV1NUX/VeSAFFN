@@ -1,17 +1,17 @@
 [default]
 # Model Information.
-d_model = "Vera"
+d_model = "Vesa"
 d_model_input_type = "x_only"
 d_kd_teacher_warmup_epochs = 10
 
 # RevIN
 m_use_norm = true
-m_individual = false
+m_individual = true
+
 
 # Shared VeRA basis
 m_seq_dim = 256
-m_vera_rank = 16
-
+m_vesa_rank = 64
 
 # -------------------------
 # Datasets

@@ -18,7 +18,11 @@ MODEL_CONFIGS = {
     "FrNet": "scripts/FrNet/toml/ETTh1.toml",
     "iTransformer": "scripts/iTransformer/toml/model.toml",
     "PatchTST": "scripts/PatchTST/toml/model1.toml",
-    "Vera": "scripts/Vera/toml/model2.toml",
+    "Vesa": "scripts/Vesa/toml/model1.toml",
+    # Chronos-2 is a fixed, pretrained zero-shot forecaster (no per-horizon
+    # architecture tuning), so its model.toml carries no "m_*" overrides --
+    # see scripts/Chronos2/toml/model.toml.
+    "Chronos2": "scripts/Chronos2/toml/model.toml",
 }
 
 # Forward-pass-only profiling has no training dynamics, so a single fixed
@@ -112,6 +116,7 @@ def main():
                 "flops": stats["flops"],
                 "gflops": stats["flops"] / 1e9,
                 "size_mb": stats["size_mb"],
+                "latency_ms": stats["latency_ms"],
             })
 
             torch.cuda.empty_cache()

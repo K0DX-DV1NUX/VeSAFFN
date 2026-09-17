@@ -28,110 +28,172 @@ d_forecast_type = "M"
 d_inverse_transform = false
 
 
+# channels: 7=ETTh1/ETTh2/ETTm1/ETTm2, 21=weather, 56=solar_TX, 137=solar_AL,
+# 207=METRLA, 321=electricity, 325=PEMSBAY
 [[runs]]
-d_in_features = 1
-d_out_features = 1
-d_seq_len = 96
-d_pred_len = 96
-
-[[runs]]
-d_in_features = 1
-d_out_features = 1
-d_seq_len = 96
-d_pred_len = 336
-
-[[runs]]
-d_in_features = 1
-d_out_features = 1
-d_seq_len = 96
-d_pred_len = 720
-
-[[runs]]
-d_in_features = 1
-d_out_features = 1
+d_in_features = 7
+d_out_features = 7
 d_seq_len = 336
 d_pred_len = 96
 
 [[runs]]
-d_in_features = 1
-d_out_features = 1
+d_in_features = 7
+d_out_features = 7
+d_seq_len = 336
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 7
+d_out_features = 7
 d_seq_len = 336
 d_pred_len = 336
 
 [[runs]]
-d_in_features = 1
-d_out_features = 1
+d_in_features = 7
+d_out_features = 7
 d_seq_len = 336
 d_pred_len = 720
 
 [[runs]]
-d_in_features = 10
-d_out_features = 10
-d_seq_len = 96
-d_pred_len = 96
-
-[[runs]]
-d_in_features = 10
-d_out_features = 10
-d_seq_len = 96
-d_pred_len = 336
-
-[[runs]]
-d_in_features = 10
-d_out_features = 10
-d_seq_len = 96
-d_pred_len = 720
-
-[[runs]]
-d_in_features = 10
-d_out_features = 10
+d_in_features = 21
+d_out_features = 21
 d_seq_len = 336
 d_pred_len = 96
 
 [[runs]]
-d_in_features = 10
-d_out_features = 10
+d_in_features = 21
+d_out_features = 21
+d_seq_len = 336
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 21
+d_out_features = 21
 d_seq_len = 336
 d_pred_len = 336
 
 [[runs]]
-d_in_features = 10
-d_out_features = 10
+d_in_features = 21
+d_out_features = 21
 d_seq_len = 336
 d_pred_len = 720
 
 [[runs]]
-d_in_features = 100
-d_out_features = 100
-d_seq_len = 96
+d_in_features = 56
+d_out_features = 56
+d_seq_len = 336
 d_pred_len = 96
 
 [[runs]]
-d_in_features = 100
-d_out_features = 100
-d_seq_len = 96
+d_in_features = 56
+d_out_features = 56
+d_seq_len = 336
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 56
+d_out_features = 56
+d_seq_len = 336
 d_pred_len = 336
 
 [[runs]]
-d_in_features = 100
-d_out_features = 100
-d_seq_len = 96
+d_in_features = 56
+d_out_features = 56
+d_seq_len = 336
 d_pred_len = 720
 
 [[runs]]
-d_in_features = 100
-d_out_features = 100
+d_in_features = 137
+d_out_features = 137
 d_seq_len = 336
 d_pred_len = 96
 
 [[runs]]
-d_in_features = 100
-d_out_features = 100
+d_in_features = 137
+d_out_features = 137
+d_seq_len = 336
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 137
+d_out_features = 137
 d_seq_len = 336
 d_pred_len = 336
 
 [[runs]]
-d_in_features = 100
-d_out_features = 100
+d_in_features = 137
+d_out_features = 137
+d_seq_len = 336
+d_pred_len = 720
+
+[[runs]]
+d_in_features = 207
+d_out_features = 207
+d_seq_len = 336
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 207
+d_out_features = 207
+d_seq_len = 336
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 207
+d_out_features = 207
+d_seq_len = 336
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 207
+d_out_features = 207
+d_seq_len = 336
+d_pred_len = 720
+
+[[runs]]
+d_in_features = 321
+d_out_features = 321
+d_seq_len = 336
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 321
+d_out_features = 321
+d_seq_len = 336
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 321
+d_out_features = 321
+d_seq_len = 336
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 321
+d_out_features = 321
+d_seq_len = 336
+d_pred_len = 720
+
+[[runs]]
+d_in_features = 325
+d_out_features = 325
+d_seq_len = 336
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 325
+d_out_features = 325
+d_seq_len = 336
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 325
+d_out_features = 325
+d_seq_len = 336
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 325
+d_out_features = 325
 d_seq_len = 336
 d_pred_len = 720

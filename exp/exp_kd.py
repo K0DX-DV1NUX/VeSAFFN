@@ -9,10 +9,10 @@ import torch
 import torch.nn as nn
 from torch import optim
 from torch.optim import lr_scheduler
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from data_provider.data_factory import TimeSeriesDataset
-from models import Chronos2, DLinear, PatchTST, iTransformer, FrNet, Vera
+from models import Chronos2, DLinear, PatchTST, iTransformer, FrNet, Vesa
 from utils.learning_rates import adjust_learning_rate
 from utils.metrics import metric
 
@@ -36,7 +36,7 @@ OFFLINE_TEACHER_MODELS = {
 }
 
 STUDENT_MODELS = {
-    'Vera': Vera,
+    'Vesa': Vesa,
 }
 
 
@@ -143,7 +143,7 @@ def _forward(model, args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_cont
     Runs one model's forward pass and slices it to the forecast horizon.
     Teacher and student each use their own d_model_input_type, since a
     transformer-style teacher (e.g. iTransformer) may need the mark/dec
-    inputs a linear-style student (Vera) does not.
+    inputs a linear-style student (Vesa) does not.
     '''
     model_input_args = _model_args(args.d_model_input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
@@ -155,6 +155,23 @@ def _forward(model, args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_cont
 
     f_dim = -1 if args.d_forecast_type == 'MS' else 0
     return outputs[:, -args.d_pred_len:, f_dim:]
+
+
+class _IndexedDataset(Dataset):
+    '''
+    Wraps a dataset to also return each sample's own index. Used only for
+    Exp_KD_Offline's train_loader, so that a frozen teacher's outputs --
+    precomputed once, in dataset order -- can be looked up correctly for
+    each sample no matter how the DataLoader shuffles batch order.
+    '''
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        return (*self.dataset[idx], idx)
 
 
 class _EarlyStoppingKD:
@@ -594,6 +611,28 @@ class Exp_KD_Offline:
         self.teacher = self._build_frozen_teacher().to(self.device)
         self.student = STUDENT_MODELS[student_args.d_model].Model(student_args).float().to(self.device)
 
+        if self.student_args.d_is_training:
+            # The teacher is frozen and never trains in offline mode, so its
+            # output for a given window is the same in every epoch. Compute
+            # it once here (in dataset order) instead of re-running the
+            # teacher on every training iteration of every epoch -- for a
+            # cheap teacher (DLinear, etc.) that redundant work was easy to
+            # miss, but for a full pretrained model like Chronos-2 it's the
+            # difference between one pass over the data and one pass per
+            # epoch. train_loader is then rebuilt over an index-wrapped
+            # dataset so shuffled batches can still look up the right
+            # cached row per sample.
+            indexed_train_dataset = _IndexedDataset(self.train_loader.dataset)
+            self.teacher_cache = self._build_teacher_cache(indexed_train_dataset)
+            self.train_loader = DataLoader(
+                indexed_train_dataset,
+                batch_size=self.student_args.d_batch_size,
+                shuffle=True,
+                num_workers=self.student_args.d_num_workers,
+                drop_last=True,
+                pin_memory=True,
+            )
+
     def _build_frozen_teacher(self):
         '''
         Chronos-2 (d_pretrained=true) already loads its own fixed weights
@@ -625,6 +664,36 @@ class Exp_KD_Offline:
         model.eval()
 
         return model
+
+    @torch.no_grad()
+    def _build_teacher_cache(self, indexed_dataset):
+        '''
+        Runs the frozen teacher exactly once over every window in
+        `indexed_dataset`, in a single unshuffled pass, and returns a
+        tensor of its outputs ordered by dataset index. train() then
+        indexes into this instead of calling the teacher at all.
+        '''
+        cache_loader = DataLoader(
+            indexed_dataset,
+            batch_size=self.student_args.d_batch_size,
+            shuffle=False,
+            drop_last=False,
+            num_workers=self.student_args.d_num_workers,
+            pin_memory=True,
+        )
+
+        outputs = [None] * len(indexed_dataset)
+        for batch_x, batch_y, batch_x_mark, batch_y_mark, idx in cache_loader:
+            batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp = _get_inputs(
+                self.device, self.student_args, batch_x, batch_y, batch_x_mark, batch_y_mark
+            )
+            teacher_out = _forward(
+                self.teacher, self.teacher_args, batch_x, batch_x_mark, dec_inp, batch_y_mark, nullcontext()
+            )
+            for pos, i in enumerate(idx.tolist()):
+                outputs[i] = teacher_out[pos].detach().cpu()
+
+        return torch.stack(outputs, dim=0)
 
     def _select_optimizer(self):
         # The teacher is fixed -- only the student's parameters are trained.
@@ -700,7 +769,7 @@ class Exp_KD_Offline:
             self.student.train()
             epoch_time = time.time()
 
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(self.train_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark, idx) in enumerate(self.train_loader):
                 iter_count += 1
 
                 model_optim.zero_grad(set_to_none=True)
@@ -709,8 +778,10 @@ class Exp_KD_Offline:
 
                 amp_context = torch.cuda.amp.autocast() if self.student_args.d_use_amp else nullcontext()
 
-                with torch.no_grad():
-                    teacher_out = _forward(self.teacher, self.teacher_args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_context)
+                # Precomputed once in __init__ (see _build_teacher_cache) --
+                # the teacher is frozen, so its output for this window was
+                # already known before training started.
+                teacher_out = self.teacher_cache[idx].to(self.device)
                 student_out = _forward(self.student, self.student_args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_context)
 
                 f_dim = -1 if self.student_args.d_forecast_type == 'MS' else 0

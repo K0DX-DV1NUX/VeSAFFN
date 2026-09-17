@@ -1,4 +1,5 @@
 import os
+import time
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -7,7 +8,7 @@ import torch
 
 from fvcore.nn import FlopCountAnalysis
 
-from models import DLinear, PatchTST, iTransformer, FrNet, Vera
+from models import DLinear, PatchTST, iTransformer, FrNet, Vesa, Chronos2
 from utils.timefeatures import time_features
 
 
@@ -36,7 +37,8 @@ class Exp_Params:
             'PatchTST': PatchTST,
             'iTransformer': iTransformer,
             'FrNet': FrNet,
-            'Vera': Vera,
+            'Vesa': Vesa,
+            'Chronos2': Chronos2,
         }
 
         return model_dict[self.args.d_model].Model(self.args).float()
@@ -86,34 +88,50 @@ class Exp_Params:
 
         return (batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
+    def _sync(self):
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
+
     @torch.no_grad()
     def profile(self):
         '''
-        Runs a single forward pass and returns size/compute stats for the
-        model under the current configuration: total/trainable parameter
-        counts, the subset of parameters actually exercised by this forward
-        pass ("active" -- differs from total when a model owns branches a
-        given config never calls, e.g. an unused decomposition head), MACs
-        / FLOPs, and the model's footprint in MB.
+        Runs a single forward pass and returns size/compute/latency stats
+        for the model under the current configuration: total/trainable
+        parameter counts, the subset of parameters actually exercised by
+        this forward pass ("active" -- differs from total when a model owns
+        branches a given config never calls, e.g. an unused decomposition
+        head), MACs / FLOPs, the model's footprint in MB, and wall-clock
+        inference latency for one forward pass at the configured batch size.
         '''
         self.model.eval()
         inputs = self._build_inputs()
 
+        # One untimed forward pass to warm up (CUDA kernel/cuDNN autotuning,
+        # lazy weight materialization, etc.) so the timed pass below isn't
+        # skewed by one-time setup cost.
+        self.model(*inputs)
+        self._sync()
+
         # Forward hooks tell us which submodules actually ran for this
         # config, so params owned by dead/unused branches can be excluded.
+        # This pass also doubles as the timed pass, so an expensive model
+        # (e.g. Chronos2's full pipeline) isn't run more times than needed.
         fired = set()
         handles = [
             m.register_forward_hook(lambda mod, inp, out, _m=m: fired.add(id(_m)))
             for m in self.model.modules()
         ]
         try:
+            start = time.perf_counter()
             self.model(*inputs)
+            self._sync()
+            latency_s = time.perf_counter() - start
         finally:
             for handle in handles:
                 handle.remove()
 
-        # A Parameter/buffer shared across submodules (e.g. Vera's shared_pa/
-        # shared_pb, re-registered on every VeraLinear that holds a
+        # A Parameter/buffer shared across submodules (e.g. Vesa's shared_pa/
+        # shared_pb, re-registered on every VesaLinear that holds a
         # reference) must only be counted once -- dedupe by tensor identity
         # rather than by owning module.
         total_params = 0
@@ -158,4 +176,5 @@ class Exp_Params:
             "macs": macs,
             "flops": macs * 2,
             "size_mb": size_bytes / (1024 ** 2),
+            "latency_ms": latency_s * 1000,
         }
