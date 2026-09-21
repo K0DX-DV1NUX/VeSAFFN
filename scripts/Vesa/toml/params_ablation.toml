@@ -1,0 +1,314 @@
+# -------------------------------------------------
+# Shared comparison grid for runParams.py profiling.
+#
+# Fixes channels / seq_len / pred_len so every model
+# is profiled (params + FLOPs/MACs) on the exact same
+# conditions. Not used by runExp.py — model.toml still
+# owns the runs used for actual training.
+# -------------------------------------------------
+
+[default]
+# Training
+d_is_training = 1
+d_train_epochs = 1
+d_patience = 1
+d_learning_rate = 0.001
+d_batch_size = 1
+d_train_stride = 5
+d_test_stride = 1
+d_lradj = "type7"
+
+
+# Data
+d_root_path = "../dataset"
+d_data = "ETTh1"
+d_data_path = "ETTh1.csv"
+d_freq = "h"
+d_forecast_type = "M"
+d_inverse_transform = false
+
+
+
+##### Rank = 16, D=256
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 16
+
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 16
+
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 16
+
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 16
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 16
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 16
+
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 16
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 16
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 16
+
+
+##### Rank = 64, D=256
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 64
+
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 64
+
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 64
+
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 64
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 64
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 64
+
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 64
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 64
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 64
+
+##### Rank = 16, D=512
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 16
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 16
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 16
+m_seq_dim = 512
+
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 16
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 16
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 16
+m_seq_dim = 512
+
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 16
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 16
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 16
+m_seq_dim = 512
+
+
+##### Rank = 64, D=512
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 64
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 64
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 1
+d_out_features = 1
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 64
+m_seq_dim = 512
+
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 64
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 64
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 10
+d_out_features = 10
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 64
+m_seq_dim = 512
+
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 96
+m_vesa_rank = 64
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 336
+m_vesa_rank = 64
+m_seq_dim = 512
+
+[[runs]]
+d_in_features = 100
+d_out_features = 100
+d_seq_len = 96
+d_pred_len = 720
+m_vesa_rank = 64
+m_seq_dim = 512
