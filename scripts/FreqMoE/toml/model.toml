@@ -1,0 +1,41 @@
+[default]
+d_model = "FreqMoE"
+d_model_input_type = "x_only"
+m_freq_num_blocks = 3
+m_expert_num = 3
+m_dropout_freq = 0.2
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 48
+d_test_stride = 48
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 512
+d_test_stride = 512
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720

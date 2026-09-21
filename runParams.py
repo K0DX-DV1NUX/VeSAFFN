@@ -17,6 +17,8 @@ MODEL_CONFIGS = {
     "DLinear": "scripts/DLinear/toml/model.toml",
     "FrNet": "scripts/FrNet/toml/ETTh1.toml",
     "iTransformer": "scripts/iTransformer/toml/model.toml",
+    "FITS": "scripts/FITS/toml/hourly.toml",
+    "FreqMoE": "scripts/FreqMoE/toml/model.toml",
     "PatchTST": "scripts/PatchTST/toml/model1.toml",
     "Vesa": "scripts/Vesa/toml/model1.toml",
     # Chronos-2 is a fixed, pretrained zero-shot forecaster (no per-horizon

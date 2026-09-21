@@ -14,7 +14,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
 from data_provider.data_factory import TimeSeriesDataset
-from models import Chronos2, DLinear, MeanMedian, Naive, PatchTST, iTransformer, FrNet, Vesa
+from models import Chronos2, DLinear, FITS, FreqMoE, MeanMedian, Naive, PatchTST, iTransformer, FrNet, Vesa
 from utils.learning_rates import adjust_learning_rate
 from utils.tools import EarlyStopping
 from utils.metrics import metric
@@ -81,6 +81,8 @@ class Exp_Main:
             'PatchTST': PatchTST,
             'iTransformer': iTransformer,
             'FrNet': FrNet,
+            'FITS': FITS,
+            'FreqMoE': FreqMoE,
             'Vesa': Vesa,
         }
         

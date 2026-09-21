@@ -8,7 +8,7 @@ import torch
 
 from fvcore.nn import FlopCountAnalysis
 
-from models import DLinear, PatchTST, iTransformer, FrNet, Vesa, Chronos2
+from models import DLinear, PatchTST, iTransformer, FrNet, FITS, FreqMoE, Vesa, Chronos2
 from utils.timefeatures import time_features
 
 
@@ -37,6 +37,8 @@ class Exp_Params:
             'PatchTST': PatchTST,
             'iTransformer': iTransformer,
             'FrNet': FrNet,
+            'FITS': FITS,
+            'FreqMoE': FreqMoE,
             'Vesa': Vesa,
             'Chronos2': Chronos2,
         }
