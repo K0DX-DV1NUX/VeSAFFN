@@ -1,0 +1,199 @@
+# -------------------------------------------------
+# Shared comparison grid for runParams.py profiling.
+#
+# Fixes channels / seq_len / pred_len so every model
+# is profiled (params + FLOPs/MACs) on the exact same
+# conditions. Not used by runExp.py — model.toml still
+# owns the runs used for actual training.
+# -------------------------------------------------
+
+[default]
+# Training
+d_is_training = 1
+d_train_epochs = 1
+d_patience = 1
+d_learning_rate = 0.001
+d_batch_size = 1
+d_train_stride = 5
+d_test_stride = 1
+d_lradj = "type7"
+
+
+# Data
+d_root_path = "../dataset"
+d_data = "ETTh1"
+d_data_path = "ETTh1.csv"
+d_freq = "h"
+d_forecast_type = "M"
+d_inverse_transform = false
+
+
+# channels: 7=ETTh1/ETTh2/ETTm1/ETTm2, 21=weather, 56=solar_TX, 137=solar_AL,
+# 207=METRLA, 321=electricity, 325=PEMSBAY
+[[runs]]
+d_in_features = 7
+d_out_features = 7
+d_seq_len = 96
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 7
+d_out_features = 7
+d_seq_len = 96
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 7
+d_out_features = 7
+d_seq_len = 96
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 7
+d_out_features = 7
+d_seq_len = 96
+d_pred_len = 720
+
+[[runs]]
+d_in_features = 21
+d_out_features = 21
+d_seq_len = 96
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 21
+d_out_features = 21
+d_seq_len = 96
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 21
+d_out_features = 21
+d_seq_len = 96
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 21
+d_out_features = 21
+d_seq_len = 96
+d_pred_len = 720
+
+[[runs]]
+d_in_features = 56
+d_out_features = 56
+d_seq_len = 96
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 56
+d_out_features = 56
+d_seq_len = 96
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 56
+d_out_features = 56
+d_seq_len = 96
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 56
+d_out_features = 56
+d_seq_len = 96
+d_pred_len = 720
+
+[[runs]]
+d_in_features = 137
+d_out_features = 137
+d_seq_len = 96
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 137
+d_out_features = 137
+d_seq_len = 96
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 137
+d_out_features = 137
+d_seq_len = 96
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 137
+d_out_features = 137
+d_seq_len = 96
+d_pred_len = 720
+
+[[runs]]
+d_in_features = 207
+d_out_features = 207
+d_seq_len = 96
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 207
+d_out_features = 207
+d_seq_len = 96
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 207
+d_out_features = 207
+d_seq_len = 96
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 207
+d_out_features = 207
+d_seq_len = 96
+d_pred_len = 720
+
+[[runs]]
+d_in_features = 321
+d_out_features = 321
+d_seq_len = 96
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 321
+d_out_features = 321
+d_seq_len = 96
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 321
+d_out_features = 321
+d_seq_len = 96
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 321
+d_out_features = 321
+d_seq_len = 96
+d_pred_len = 720
+
+[[runs]]
+d_in_features = 325
+d_out_features = 325
+d_seq_len = 96
+d_pred_len = 96
+
+[[runs]]
+d_in_features = 325
+d_out_features = 325
+d_seq_len = 96
+d_pred_len = 192
+
+[[runs]]
+d_in_features = 325
+d_out_features = 325
+d_seq_len = 96
+d_pred_len = 336
+
+[[runs]]
+d_in_features = 325
+d_out_features = 325
+d_seq_len = 96
+d_pred_len = 720

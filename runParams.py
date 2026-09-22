@@ -57,6 +57,7 @@ def main():
     parser.add_argument("--gpu_config", type=str, required=True, help="Path to experiment TOML config for gpu settings.")
     parser.add_argument("--params_config", type=str, required=True, help="Path to experiment TOML config for the channel/seq_len/pred_len grid.")
     parser.add_argument("--output", type=str, default="Params.csv", help="Path to the output CSV file.")
+    parser.add_argument("--models", type=str, nargs="+", default=None, help="Only profile these MODEL_CONFIGS labels (default: all).")
     args = parser.parse_args()
 
     gpu_values = load_toml(args.gpu_config)
@@ -69,6 +70,8 @@ def main():
     rows = []
 
     for label, model_config_path in MODEL_CONFIGS.items():
+        if args.models and label not in args.models:
+            continue
         model_values = load_toml(model_config_path)
 
         for run in params_values["runs"]:
