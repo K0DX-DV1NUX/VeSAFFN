@@ -12,7 +12,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, Dataset
 
 from data_provider.data_factory import TimeSeriesDataset
-from models import Chronos2, DLinear, PatchTST, iTransformer, FrNet, Vesa
+from models import Chronos2, DLinear, FITS, PatchTST, iTransformer, FrNet, Vesa
 from utils.learning_rates import adjust_learning_rate
 from utils.metrics import metric
 
@@ -37,6 +37,8 @@ OFFLINE_TEACHER_MODELS = {
 
 STUDENT_MODELS = {
     'Vesa': Vesa,
+    # FITS emits look-back + horizon; _forward keeps only the last pred_len steps.
+    'FITS': FITS,
 }
 
 
@@ -143,7 +145,7 @@ def _forward(model, args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_cont
     Runs one model's forward pass and slices it to the forecast horizon.
     Teacher and student each use their own d_model_input_type, since a
     transformer-style teacher (e.g. iTransformer) may need the mark/dec
-    inputs a linear-style student (Vesa) does not.
+    inputs a linear-style student (Vesa, FITS) does not.
     '''
     model_input_args = _model_args(args.d_model_input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
