@@ -32,28 +32,28 @@ m_individual = true
 
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 672
 m_vesa_rank = 4
 m_wavelet_type = "none"
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 672
 m_vesa_rank = 64
 m_wavelet_type = "none"
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 2016
 m_vesa_rank = 4
 m_wavelet_type = "none"
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 2016
 m_vesa_rank = 64
@@ -62,28 +62,28 @@ m_wavelet_type = "none"
 
 ## Haar
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 336
 m_vesa_rank = 4
 m_wavelet_type = "haar"
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 336
 m_vesa_rank = 64
 m_wavelet_type = "haar"
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 1008
 m_vesa_rank = 4
 m_wavelet_type = "haar"
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 1008
 m_vesa_rank = 64
@@ -91,28 +91,28 @@ m_wavelet_type = "haar"
 
 ##db4
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 336
 m_vesa_rank = 4
 m_wavelet_type = "db4"
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 336
 m_vesa_rank = 64
 m_wavelet_type = "db4"
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 1008
 m_vesa_rank = 4
 m_wavelet_type = "db4"
 
 [[runs]]
-d_seq_len = 96
+d_seq_len = 336
 d_pred_len = 192
 m_seq_dim = 1008
 m_vesa_rank = 64

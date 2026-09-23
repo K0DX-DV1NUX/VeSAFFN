@@ -1,6 +1,7 @@
 [default]
 d_model = "FITS"
 d_model_input_type = "x_only"
+d_kd_teacher_warmup_epochs = 10
 m_individual = 0   # paper default: one shared complex layer across channels
 m_h_order = 2      # cut-off at the 2nd harmonic (paper's recommended setting)
 m_base_T = 288      # dominant period in samples for this dataset
