@@ -1,0 +1,123 @@
+# -------------------------
+# Ablation: Covers the ablation for rank and dimension edge-case testing.
+# -------------------------
+[default]
+# Model Information.
+d_model = "Vesa"
+d_model_input_type = "x_only"
+d_kd_teacher_warmup_epochs = 10
+
+# RevIN
+m_use_norm = true
+m_individual = false
+
+
+# Shared VeRA basis
+# m_seq_dim = 256
+# m_vesa_rank = 64
+
+# -------------------------
+# Ablation: D=336, r=6
+# -------------------------
+
+# [[runs]]
+# d_seq_len = 336
+# d_pred_len = 96
+# d_test_stride = 96
+# m_seq_dim = 336
+# m_vesa_rank = 6
+
+# [[runs]]
+# d_seq_len = 336
+# d_pred_len = 192
+# d_test_stride = 192
+# m_seq_dim = 336
+# m_vesa_rank = 6
+
+
+# [[runs]]
+# d_seq_len = 336
+# d_pred_len = 336
+# d_test_stride = 336
+# m_seq_dim = 336
+# m_vesa_rank = 6
+
+# # -------------------------
+# # Ablation: D=336, r=84
+# # -------------------------
+# [[runs]]
+# d_seq_len = 336
+# d_pred_len = 96
+# d_test_stride = 96
+# m_seq_dim = 336
+# m_vesa_rank = 84
+
+# [[runs]]
+# d_seq_len = 336
+# d_pred_len = 192
+# d_test_stride = 192
+# m_seq_dim = 336
+# m_vesa_rank = 84
+
+
+# [[runs]]
+# d_seq_len = 336
+# d_pred_len = 336
+# d_test_stride = 336
+# m_seq_dim = 336
+# m_vesa_rank = 84
+
+# # -------------------------
+# # Ablation: D=1008, r=20
+# # -------------------------
+# [[runs]]
+# d_seq_len = 336
+# d_pred_len = 96
+# d_test_stride = 96
+# m_seq_dim = 1008
+# m_vesa_rank = 20
+
+# [[runs]]
+# d_seq_len = 336
+# d_pred_len = 192
+# d_test_stride = 192
+# m_seq_dim = 1008
+# m_vesa_rank = 20
+
+
+# [[runs]]
+# d_seq_len = 336
+# d_pred_len = 336
+# d_test_stride = 336
+# m_seq_dim = 1008
+# m_vesa_rank = 20
+
+# -------------------------
+# Ablation: D=1008, r=252
+# -------------------------
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+m_seq_dim = 1008
+m_vesa_rank = 252
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+m_seq_dim = 1008
+m_vesa_rank = 252
+
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+m_seq_dim = 1008
+m_vesa_rank = 252
+
+
+
+
+

@@ -1,3 +1,6 @@
+# -------------------------
+# Ablation: Covers the ablation for rank and dimension edge-case testing.
+# -------------------------
 [default]
 # Model Information.
 d_model = "Vesa"
@@ -13,14 +16,11 @@ m_individual = true
 m_seq_dim = 256
 m_vesa_rank = 64
 
-# -------------------------
-# Datasets
-# -------------------------
+
 [[runs]]
 d_seq_len = 336
 d_pred_len = 96
 d_test_stride = 96
-
 
 [[runs]]
 d_seq_len = 336
@@ -34,7 +34,3 @@ d_pred_len = 336
 d_test_stride = 336
 
 
-[[runs]]
-d_seq_len = 336
-d_pred_len = 720
-d_test_stride = 720
