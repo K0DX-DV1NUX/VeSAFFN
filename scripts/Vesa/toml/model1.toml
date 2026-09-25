@@ -6,7 +6,6 @@ d_kd_teacher_warmup_epochs = 10
 
 # RevIN
 m_use_norm = true
-m_wavelet_type = "haar"  # none | haar | db2 | db4 | db6
 m_individual = false
 
 # Shared VeRA basis
