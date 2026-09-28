@@ -14,7 +14,7 @@ from models import FITS
 
 
 def build_cfg(toml: str, pred_len: int, channels: int = 7) -> ExpConfig:
-    with open(f"scripts/FITS/toml/{toml}.toml", "rb") as f:
+    with open(f"scripts/FITS/toml/standalone/{toml}.toml", "rb") as f:
         m = tomllib.load(f)["default"]
     return ExpConfig(**{**m, "d_data": "ETTh1", "d_root_path": "../dataset", "d_data_path": "ETTh1.csv",
                         "d_seq_len": 336, "d_pred_len": pred_len,

@@ -238,6 +238,58 @@ class ExpConfig(BaseModel):
         )
     )
 
+    # -------------------------
+    # Knowledge distillation (read from the student's toml; runKD.py only)
+    # -------------------------
+    d_kd_mode: Literal["none", "online", "offline"] = Field(
+        "none",
+        description=(
+            "none    = standalone run, no distillation (runExp.py).\n"
+            "online  = teacher and student train jointly (basic KD only).\n"
+            "offline = teacher is frozen, only the student trains (basic or timedistill)."
+        )
+    )
+
+    d_kd_type: Literal["basic", "timedistill"] = Field(
+        "basic",
+        description=(
+            "basic       = Exp_KD / Exp_KD_Offline's own KD loss.\n"
+            "timedistill = TimeDistill's multi-scale + multi-period loss (arXiv:2502.15016); offline only."
+        )
+    )
+
+    d_kd_teacher_warmup_epochs: int = Field(
+        0,
+        ge=0,
+        description="Online KD only: epochs the teacher trains alone before the student joins."
+    )
+
+    # TimeDistill hyperparameters -- defaults follow the official code
+    # (github.com/LingFengGold/TimeDistill). Only read when d_kd_type = "timedistill".
+    d_td_alpha: float = Field(
+        1.0,
+        ge=0.0,
+        description="TimeDistill: weight on the prediction-level (multi-scale + multi-period) term."
+    )
+
+    d_td_tau: float = Field(
+        0.5,
+        gt=0.0,
+        description="TimeDistill: softmax temperature over the forecast's amplitude spectrum."
+    )
+
+    d_td_scales: int = Field(
+        3,
+        ge=0,
+        description="TimeDistill: number of downsampled scales M (M + 1 views are matched)."
+    )
+
+    d_td_window: int = Field(
+        2,
+        ge=2,
+        description="TimeDistill: avg-pool kernel/stride between consecutive scales."
+    )
+
     # --------------------------------
     # Allow CLI-style input: "0,1,2"
     # --------------------------------
@@ -279,4 +331,38 @@ class ExpConfig(BaseModel):
         if self.d_label_len > self.d_seq_len:
             raise ValueError("d_label_len must be <= d_seq_len.")
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_kd(self):
+        # TimeDistill distills from a frozen teacher: offline only. This also
+        # rules it out for standalone (none) and online runs.
+        if self.d_kd_type == "timedistill" and self.d_kd_mode != "offline":
+            raise ValueError(
+                f"d_kd_type = 'timedistill' requires d_kd_mode = 'offline' (got '{self.d_kd_mode}'). "
+                f"Online KD supports d_kd_type = 'basic' only."
+            )
+
+        if self.d_kd_type == "timedistill" and self.d_pred_len // (self.d_td_window ** self.d_td_scales) < 1:
+            raise ValueError(
+                f"d_td_scales = {self.d_td_scales} with d_td_window = {self.d_td_window} downsamples "
+                f"d_pred_len = {self.d_pred_len} below one step; reduce d_td_scales."
+            )
+
+        return self
+
+
+class KDConfig(ExpConfig):
+    '''
+    Student config for runKD.py: same as ExpConfig, but must actually pick a
+    distillation mode -- a KD run with d_kd_mode = "none" is a mistake.
+    '''
+
+    @model_validator(mode="after")
+    def validate_kd_mode_set(self):
+        if self.d_kd_mode == "none":
+            raise ValueError(
+                "runKD.py needs d_kd_mode = 'online' or 'offline' in the student's toml "
+                "(d_kd_mode = 'none' is for standalone runExp.py runs)."
+            )
         return self

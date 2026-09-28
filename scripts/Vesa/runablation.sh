@@ -1,6 +1,6 @@
 #!/bin/sh
 
-model_config="scripts/Vesa/toml/ablation2.toml"
+model_config="scripts/Vesa/toml/standalone/ablation2.toml"
 data_config="scripts/defaults/"
 gpu_config="scripts/defaults/gpu.toml"
 

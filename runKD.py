@@ -4,25 +4,22 @@ import torch
 import random
 import numpy as np
 
-from base.config import ExpConfig
+from base.config import ExpConfig, KDConfig
 from exp.exp_kd import Exp_KD, Exp_KD_Offline
+from exp.exp_timedistill import Exp_TimeDistill_Offline
 from utils.tools import check_and_prepare_dirs, save_results, inverse_transform
 from utils.plotting import plot_results
 
 
 def main():
+    # KD mode (online/offline) and type (basic/timedistill) come from the
+    # student's toml (d_kd_mode, d_kd_type) and are validated by KDConfig.
     parser = argparse.ArgumentParser(description="Knowledge Distillation Runner (online or offline)")
     parser.add_argument("--data_config", type=str, required=True, help="Path to experiment TOML config for dataset.")
     parser.add_argument("--gpu_config", type=str, required=True, help="Path to experiment TOML config for gpu settings.")
     parser.add_argument("--teacher_config", type=str, required=True, help="Path to experiment TOML config for the KD teacher model.")
     parser.add_argument("--student_config", type=str, required=True, help="Path to experiment TOML config for the KD student model.")
-    parser.add_argument("--kd_mode", type=str, default="online", choices=["online", "offline"],
-                         help="'online' trains teacher and student jointly. 'offline' freezes the teacher "
-                              "(a self-contained pretrained model like Chronos2, or a fixed checkpoint at "
-                              "scripts/<Model>/pre_trained/checkpoint.pth) and only trains the student.")
     args = parser.parse_args()
-
-    Exp_KD_Class = Exp_KD if args.kd_mode == "online" else Exp_KD_Offline
 
     # -------------------------
     # Load Running Configurations.
@@ -87,7 +84,14 @@ def main():
             }
 
             teacher_cfgs = ExpConfig(**teacher_merged)
-            student_cfgs = ExpConfig(**student_merged)
+            student_cfgs = KDConfig(**student_merged)
+
+            if student_cfgs.d_kd_type == "timedistill":
+                Exp_KD_Class = Exp_TimeDistill_Offline
+            elif student_cfgs.d_kd_mode == "online":
+                Exp_KD_Class = Exp_KD
+            else:
+                Exp_KD_Class = Exp_KD_Offline
 
             random.seed(d_seed)
             torch.manual_seed(d_seed)
@@ -112,8 +116,12 @@ def main():
             print('Student configuration in experiment:')
             print(student_cfgs)
 
-            setting = 'KD-{}-{}-{}-{}-ft{}-sl{}-pl{}-seed{}'.format(
-                args.kd_mode,
+            # Basic KD keeps its original 'KD-<mode>-...' setting names so
+            # existing checkpoints/results still line up; TimeDistill gets its
+            # own prefix so it never overwrites basic offline KD's checkpoints.
+            setting = '{}-{}-{}-{}-{}-ft{}-sl{}-pl{}-seed{}'.format(
+                "KD" if student_cfgs.d_kd_type == "basic" else "TimeDistill",
+                student_cfgs.d_kd_mode,
                 teacher_cfgs.d_model,
                 student_cfgs.d_model,
                 student_cfgs.d_data,

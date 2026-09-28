@@ -12,7 +12,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, Dataset
 
 from data_provider.data_factory import TimeSeriesDataset
-from models import Chronos2, DLinear, FITS, PatchTST, iTransformer, FrNet, Vesa
+from models import Chronos2, DLinear, FITS, FreqMoE, PatchTST, iTransformer, FrNet, Vesa
 from utils.learning_rates import adjust_learning_rate
 from utils.metrics import metric
 
@@ -26,6 +26,7 @@ TEACHER_MODELS = {
     'iTransformer': iTransformer,
     'FrNet': FrNet,
     'DLinear': DLinear,
+    'FreqMoE': FreqMoE,
 }
 
 # Allowed offline KD teachers: everything online allows, plus Chronos-2,
@@ -587,6 +588,10 @@ class Exp_KD_Offline:
     autograd graph through the teacher for nothing.
     '''
 
+    # Subclasses with a different loss (e.g. Exp_TimeDistill_Offline) override
+    # this so their results don't land in the same CSV as basic offline KD.
+    RESULT_PREFIX = "Result"
+
     def __init__(self, teacher_args, student_args):
         if teacher_args.d_model not in OFFLINE_TEACHER_MODELS:
             raise ValueError(
@@ -893,7 +898,7 @@ class Exp_KD_Offline:
 
         print('[student] mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
 
-        with open(f"Result_{self.teacher_args.d_model}_{self.student_args.d_model}.csv", 'a') as f:
+        with open(f"{self.RESULT_PREFIX}_{self.teacher_args.d_model}_{self.student_args.d_model}.csv", 'a') as f:
             f.write(f"{setting}-mse:{mse}-mae:{mae}\n")
 
         return flat_preds, flat_trues

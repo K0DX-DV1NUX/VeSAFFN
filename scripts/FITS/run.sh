@@ -1,6 +1,6 @@
 #!/bin/sh
 
-model_config="scripts/FITS/toml/"
+model_config="scripts/FITS/toml/standalone/"
 data_config="scripts/defaults/"
 gpu_config="scripts/defaults/gpu.toml"
 

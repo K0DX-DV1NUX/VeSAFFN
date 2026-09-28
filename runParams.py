@@ -17,10 +17,10 @@ MODEL_CONFIGS = {
     "DLinear": "scripts/DLinear/toml/model.toml",
     "FrNet": "scripts/FrNet/toml/ETTh1.toml",
     "iTransformer": "scripts/iTransformer/toml/model.toml",
-    "FITS": "scripts/FITS/toml/hourly.toml",
+    "FITS": "scripts/FITS/toml/standalone/hourly.toml",
     "FreqMoE": "scripts/FreqMoE/toml/model.toml",
     "PatchTST": "scripts/PatchTST/toml/model1.toml",
-    "Vesa": "scripts/Vesa/toml/model1.toml",
+    "Vesa": "scripts/Vesa/toml/standalone/model1.toml",
     # Chronos-2 is a fixed, pretrained zero-shot forecaster (no per-horizon
     # architecture tuning), so its model.toml carries no "m_*" overrides --
     # see scripts/Chronos2/toml/model.toml.
