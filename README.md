@@ -303,6 +303,78 @@ Both scripts print `OK` when every check passes.
 - Training runs for up to 100 epochs, with early stopping after 20 epochs without improvement.
 - Results are reported as MSE and MAE, averaged over 3 seeds.
 
+## Statistical analysis of the provided results
+
+> **Note:** [all_results.csv](all_results.csv) has every test result from our runs: one row per system, dataset, horizon and seed (4,260 rows). You can use it to check or extend the paper's statistical analysis without retraining anything.
+
+### Columns
+
+| Column | Meaning |
+|---|---|
+| `System` | Unique run ID: `Standalone:<Model>`, `OfflineKD:<Teacher>_<Student>`, `OnlineKD:<Teacher>_<Student>` or `TimeDistill:<Teacher>_<Student>` |
+| `Paradigm` | `Standalone`, `OfflineKD` or `OnlineKD` |
+| `KD_Method` | `Ours` (MSE distillation), `TimeDistill`, or empty for standalone runs |
+| `Model` | Model name, or `<Teacher>_<Student>` for distillation runs |
+| `Teacher`, `Student` | Distillation pair; empty for standalone runs |
+| `Dataset` | `ETTh1`, `ETTh2`, `ETTm1`, `ETTm2`, `WTH`, `SOLTX`, `SOLAL`, `ELT`, `METRLA`, `PEMSBAY` |
+| `DatasetGroup` | `Low-Dimensional` (ETT, WTH), `High-Dimensional` (SOL, ELT) or `Traffic` (METRLA, PEMSBAY) |
+| `Features`, `SeqLen` | Always `M` and `336` |
+| `PredLen` | Horizon H |
+| `Seed` | 2021, 2022 or 2023 |
+| `MSE`, `MAE` | Test error on normalised data |
+
+### Things to keep in mind
+
+- **Average over seeds first.** Run statistical tests on the per-(`System`, `Dataset`, `PredLen`) mean, not on single seeds.
+- **Use the four paper horizons.** The paper uses 96, 192, 336 and 720. Horizons 48 and 512 appear only for `Standalone:Chronos2`, `Standalone:FrNet` and `Standalone:iTransformer`, so filter them out before comparing systems.
+- **Blocks.** One (`Dataset`, `PredLen`) pair is one block, which gives 10 × 4 = 40 blocks. Compare two systems only on blocks they both have. Split by `DatasetGroup` for per-group results.
+- **Chronos2 is zero-shot.** It uses the same weights for every horizon, but each horizon is still scored on different targets.
+- **Paper's tests and verdict rules.**
+  - *Wilcoxon signed-rank (two-sided):* if |RBC| ≤ 0.1 there is no difference. Otherwise the sign of RBC gives the direction, and the result is "better/worse" if p < 0.05, or "likely better/worse" if not.
+  - *Non-inferiority (5% relative margin):* test whether median((A − B) − 0.05·B) < 0. With RBC ≥ 0, the result is "non-inferior" if p < 0.05, or "likely non-inferior" if not.
+  - *Friedman rank-sum test with Nemenyi post-hoc, at α = 0.05:* ranks are based on MSE.
+  - *Bayesian signed-rank test:* the paper's appendix uses a 5% relative ROPE.
+
+### Example
+
+```python
+import pandas as pd
+import pingouin as pg
+from scipy.stats import friedmanchisquare
+
+df = pd.read_csv("all_results.csv")
+
+# Use the four paper horizons and average over seeds.
+df = df[df["PredLen"].isin([96, 192, 336, 720])]
+res = (df.groupby(["System", "Dataset", "DatasetGroup", "PredLen"], as_index=False)[["MSE", "MAE"]]
+         .mean())
+
+# One row per (Dataset, PredLen) block, one column per system.
+mse = res.pivot_table(index=["Dataset", "PredLen"], columns="System", values="MSE")
+
+# Wilcoxon signed-rank: Model A vs Model B.
+a, b = mse["Standalone:Vesa"], mse["Standalone:PatchTST"]
+print(pg.wilcoxon(a, b, alternative="two-sided"))
+
+# Non-inferiority with a 5% relative margin: H1 is median((A - B) - 0.05 * B) < 0.
+print(pg.wilcoxon((a - b) - 0.05 * b, alternative="less"))
+
+# Friedman test across systems (blocks = Dataset x PredLen).
+systems = ["Standalone:Vesa", "OfflineKD:FrNet_Vesa", "Standalone:FrNet", "Standalone:PatchTST"]
+print(friedmanchisquare(*[mse[s] for s in systems]))
+print(mse[systems].rank(axis=1).mean().sort_values())
+```
+
+This reproduces the "Combined" row for VeSA-FFN vs PatchTST in the paper's Table 4: Wilcoxon p = 0.150, RBC = +0.263; non-inferiority p = 0.014.
+
+`pingouin` is in `requirements.txt`. The Nemenyi post-hoc test (`scikit-posthocs`) and the Bayesian signed-rank test (`baycomp`) need extra installs:
+
+```bash
+pip install scikit-posthocs baycomp
+```
+
+To add your own runs, append rows with the same columns. Your runs write MSE and MAE to the `Result_*.csv` files.
+
 ## License
 
 See [LICENSE](LICENSE).
