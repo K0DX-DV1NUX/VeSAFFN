@@ -4,7 +4,12 @@ import torch.nn as nn
 from layers.RevIN import RevIN
 
 
+# Shapes: B = batch, L = seq_len, H = pred_len, C = channels,
+# D = hidden dim (m_seq_dim), r = rank (m_vesa_rank).
+
+
 class VesaLinear(nn.Module):
+    # W = P_A[:in, :r] diag(lambda_a) P_B[:r, :out] diag(lambda_b), one set of scales for all channels.
     def __init__(self, in_features, out_features, shared_pa, shared_pb, bias=True, rank=None):
         super(VesaLinear, self).__init__()
         self.in_features = in_features
@@ -13,6 +18,7 @@ class VesaLinear(nn.Module):
         self.shared_pb = shared_pb
         self.rank = rank or shared_pa.shape[0]
 
+        # Layer-specific scaling vectors.
         self.lambda_a = nn.Parameter(nn.init.ones_(torch.empty(self.rank)))
         self.lambda_b = nn.Parameter(nn.init.ones_(torch.empty(self.out_features)))
         if bias:
@@ -21,18 +27,20 @@ class VesaLinear(nn.Module):
             self.register_parameter("bias", None)
 
     def forward(self, x):
-        pa = self.shared_pa[:self.in_features, :self.rank]
-        pb = self.shared_pb[:self.rank, :self.out_features]
+        # x: [B, 2C, in]
+        pa = self.shared_pa[:self.in_features, :self.rank]     # [in, r]
+        pb = self.shared_pb[:self.rank, :self.out_features]    # [r, out]
 
-        Pa = pa * self.lambda_a
-        Pb = pb * self.lambda_b
-        x = x @ Pa @ Pb
+        Pa = pa * self.lambda_a                                # [in, r]
+        Pb = pb * self.lambda_b                                # [r, out]
+        x = x @ Pa @ Pb                                        # [B, 2C, in] -> [B, 2C, r] -> [B, 2C, out]
         if self.bias is not None:
             x = x + self.bias
         return x
 
 
 class VesaLinearChannelwise(nn.Module):
+    # Same as VesaLinear, but every channel has its own lambda_a, lambda_b and bias.
     def __init__(self, in_features, out_features, num_channels, shared_pa, shared_pb, bias=True, rank=None):
         super(VesaLinearChannelwise, self).__init__()
         self.in_features = in_features
@@ -42,6 +50,7 @@ class VesaLinearChannelwise(nn.Module):
         self.shared_pb = shared_pb
         self.rank = rank or shared_pa.shape[1]
 
+        # Per-channel scaling vectors.
         self.lambda_a = nn.Parameter(nn.init.ones_(torch.empty(num_channels, self.rank)))
         self.lambda_b = nn.Parameter(nn.init.ones_(torch.empty(num_channels, out_features)))
         if bias:
@@ -50,14 +59,15 @@ class VesaLinearChannelwise(nn.Module):
             self.register_parameter("bias", None)
 
     def forward(self, x):
-        pa = self.shared_pa[:self.in_features, :self.rank] 
-        pb = self.shared_pb[:self.rank, :self.out_features]
+        # x: [B, 2C, in]
+        pa = self.shared_pa[:self.in_features, :self.rank]     # [in, r]
+        pb = self.shared_pb[:self.rank, :self.out_features]    # [r, out]
 
-        xp = x @ pa                            
-        xp = xp * self.lambda_a.unsqueeze(0)    
+        xp = x @ pa                                            # [B, 2C, r]
+        xp = xp * self.lambda_a.unsqueeze(0)                   # [B, 2C, r]
 
-        out = xp @ pb                           
-        out = out * self.lambda_b.unsqueeze(0)
+        out = xp @ pb                                          # [B, 2C, out]
+        out = out * self.lambda_b.unsqueeze(0)                 # [B, 2C, out]
 
         if self.bias is not None:
             out = out + self.bias.unsqueeze(0)
@@ -65,6 +75,7 @@ class VesaLinearChannelwise(nn.Module):
 
 
 class Model(nn.Module):
+    # VeSA-FFN with one-level Haar wavelet decomposition.
     def __init__(self, configs):
         super(Model, self).__init__()
         self.seq_len = configs.d_seq_len
@@ -80,6 +91,7 @@ class Model(nn.Module):
         self.seq_len_half = self.seq_len // 2
         self.pred_len_half = self.pred_len // 2
 
+        # Shared low-rank matrices, reused by both FFN layers.
         Pa = torch.empty(max(self.seq_len_half, self.seq_dim), self.vesa_rank)
         Pb = torch.empty(self.vesa_rank, max(self.seq_dim, self.pred_len_half))
 
@@ -94,6 +106,7 @@ class Model(nn.Module):
         else:
             self.revin = None
 
+        # FFN: L/2 -> D -> H/2.
         if self.m_individual:
             self.layer1 = VesaLinearChannelwise(
                 in_features=self.seq_len_half,
@@ -130,34 +143,35 @@ class Model(nn.Module):
             )
 
     def forward(self, x_enc, x_mark_enc=None, x_dec=None, x_mark_dec=None, mask=None):
+        # x_enc: [B, L, C]
         b, l, c = x_enc.shape
         if self.use_norm:
-            x = self.revin(x_enc, mode="norm")
+            x = self.revin(x_enc, mode="norm")                 # [B, L, C]
         else:
             x = x_enc
 
-        x = x.permute(0, 2, 1)
+        x = x.permute(0, 2, 1)                                 # [B, C, L]
 
-        x_even, x_odd = x[..., 0::2], x[..., 1::2]
-        approx, detail = (x_even + x_odd) / math.sqrt(2), (x_even - x_odd) / math.sqrt(2)
-        stacked = torch.cat([approx, detail], dim=1)
+        # Haar DWT.
+        x_even, x_odd = x[..., 0::2], x[..., 1::2]             # [B, C, L/2] each
+        approx, detail = (x_even + x_odd) / math.sqrt(2), (x_even - x_odd) / math.sqrt(2)  # [B, C, L/2] each
+        stacked = torch.cat([approx, detail], dim=1)           # [B, 2C, L/2]
 
-        # Stashed as a side effect (not part of the return value) so KD orchestration
-        # code can read it for feature-level distillation without changing this
-        # forward() signature. Shape: [B, in_features, seq_len].
-        self._kd_feature = x
+        # Input kept for feature-level distillation.
+        self._kd_feature = x                                   # [B, C, L]
 
 
-        stacked_out = self.layer2(self.act(self.layer1(stacked)))
-        approx_out, detail_out = stacked_out.split(c, dim=1)
+        stacked_out = self.layer2(self.act(self.layer1(stacked)))  # [B, 2C, L/2] -> [B, 2C, D] -> [B, 2C, H/2]
+        approx_out, detail_out = stacked_out.split(c, dim=1)   # [B, C, H/2] each
 
-        out_even, out_odd = (approx_out + detail_out) / math.sqrt(2), (approx_out - detail_out) / math.sqrt(2)
-        out = torch.zeros(b, c, self.pred_len, device=approx_out.device, dtype=approx_out.dtype)
+        # Inverse Haar DWT.
+        out_even, out_odd = (approx_out + detail_out) / math.sqrt(2), (approx_out - detail_out) / math.sqrt(2)  # [B, C, H/2] each
+        out = torch.zeros(b, c, self.pred_len, device=approx_out.device, dtype=approx_out.dtype)  # [B, C, H]
         out[..., 0::2] = out_even
         out[..., 1::2] = out_odd
 
-        out = out.permute(0, 2, 1)
+        out = out.permute(0, 2, 1)                             # [B, H, C]
         if self.use_norm:
-            out = self.revin(out, mode="denorm")
+            out = self.revin(out, mode="denorm")               # [B, H, C]
 
         return out

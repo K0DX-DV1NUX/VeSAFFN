@@ -1,5 +1,5 @@
-# Copied on 4-May-2026 from https://github.com/sunbus100/FreqMoE-main/blob/master/models/FreqMoE.py
-
+# FreqMoE: frequency-band mixture of experts with residual frequency blocks.
+# Source: https://github.com/sunbus100/FreqMoE-main
 
 import torch
 import torch.nn as nn
@@ -25,6 +25,7 @@ class ComplexDropout(nn.Module):
 
 
 class FreqDecompMoE(nn.Module):
+    # Splits the spectrum into learnable bands and recombines them with gating weights.
 
     def __init__(self, expert_num, seq_len):
         super(FreqDecompMoE, self).__init__()
@@ -34,16 +35,16 @@ class FreqDecompMoE(nn.Module):
 
         self.band_boundaries = nn.Parameter(torch.rand(self.expert_num - 1))
 
-        #self.gating_network = nn.Linear(self.freq_len, self.expert_num)
         self.gating_network = nn.Sequential(nn.Linear(self.freq_len, self.freq_len), nn.ReLU(), nn.Linear(self.freq_len, self.expert_num))
 
 
     def forward(self, x):
+        # x: [B, C, L]
         x_mean = torch.mean(x, dim=2, keepdim=True)
         x = x - x_mean
         x_var = torch.var(x, dim=2, keepdim=True) + 1e-5
         x = x / torch.sqrt(x_var)
-        freq_x = torch.fft.rfft(x, dim=-1)
+        freq_x = torch.fft.rfft(x, dim=-1)                      # [B, C, F], F = L/2+1
         total_freq_size = freq_x.size(-1)
 
         boundaries = torch.sigmoid(self.band_boundaries)
@@ -57,6 +58,7 @@ class FreqDecompMoE(nn.Module):
         ])
 
 
+        # Band edges as frequency indices, [E + 1].
         indices = (boundaries * total_freq_size).long()
 
         indices[-1] = total_freq_size
@@ -72,20 +74,20 @@ class FreqDecompMoE(nn.Module):
 
             expert_component = freq_x * freq_mask
 
-            components.append(expert_component.unsqueeze(-1))
+            components.append(expert_component.unsqueeze(-1))  # [B, C, F, 1]
 
         freq_magnitude = torch.abs(freq_x)
 
-        gating_input = freq_magnitude.mean(dim=1)
+        gating_input = freq_magnitude.mean(dim=1)               # [B, F]
 
-        gating_scores = nn.Softmax(dim=-1)(self.gating_network(gating_input))
+        gating_scores = nn.Softmax(dim=-1)(self.gating_network(gating_input))  # [B, E]
 
-        components = torch.cat(components, dim=-1)
+        components = torch.cat(components, dim=-1)              # [B, C, F, E]
 
-        gating_scores = gating_scores.unsqueeze(1).unsqueeze(2)
+        gating_scores = gating_scores.unsqueeze(1).unsqueeze(2) # [B, 1, 1, E]
 
-        combined_freq_output = torch.sum(components * gating_scores, dim=-1)
-        combined_output = torch.fft.irfft(combined_freq_output, n=self.seq_len)
+        combined_freq_output = torch.sum(components * gating_scores, dim=-1)  # [B, C, F]
+        combined_output = torch.fft.irfft(combined_freq_output, n=self.seq_len)  # [B, C, L]
         residual = x - combined_output
 
         combined_output = combined_output * torch.sqrt(x_var) + x_mean
@@ -94,8 +96,8 @@ class FreqDecompMoE(nn.Module):
         return combined_output, boundaries, gating_scores.squeeze(1).squeeze(1)
 
 
-
 class Block(nn.Module):
+    # Complex two-layer upsampler in frequency: L -> L + H.
     def __init__(self, seq_len, pred_len, enc_in, dropout):
         super(Block, self).__init__()
         self.seq_len = seq_len
@@ -111,17 +113,18 @@ class Block(nn.Module):
         self.complex_dropout = ComplexDropout(dropout_rate=self.dropout)
 
     def forward(self, x):
+        # x: [B, L, C]
         x_mean = torch.mean(x, dim=1, keepdim=True)
         x = x - x_mean
         x_var=torch.var(x, dim=1, keepdim=True)+ 1e-5
         x = x / torch.sqrt(x_var)
 
-        spec_x = torch.fft.rfft(x, dim=1)
-        spec_x_up = self.freq_upsampler(spec_x.permute(0, 2, 1)).permute(0, 2, 1)
+        spec_x = torch.fft.rfft(x, dim=1)                                           # [B, L/2+1, C]
+        spec_x_up = self.freq_upsampler(spec_x.permute(0, 2, 1)).permute(0, 2, 1)   # [B, (L+H)/2+1, C]
         spec_x_up = self.complex_relu(spec_x_up)
         spec_x_up = self.complex_dropout(spec_x_up)
         spec_x_up = self.freq_upsampler1(spec_x_up.permute(0,2,1)).permute(0, 2, 1)
-        x_up = torch.fft.irfft(spec_x_up, dim=1)
+        x_up = torch.fft.irfft(spec_x_up, dim=1)                                    # [B, L+H, C]
         x_up = x_up * self.length_ratio
         x_up = (x_up) * torch.sqrt(x_var) + x_mean
         return x_up
@@ -142,16 +145,17 @@ class Model(nn.Module):
         self.moe = FreqDecompMoE(self.exeprt_num, self.seq_len)
 
     def forward(self, x):
-        x, bound, weight = self.moe(x.permute(0, 2, 1))
-        x = x.permute(0, 2, 1)
+        # x: [B, L, C]
+        x, bound, weight = self.moe(x.permute(0, 2, 1))    # [B, C, L]
+        x = x.permute(0, 2, 1)                             # [B, L, C]
         residual = x
         total_prediction = torch.zeros(
             x.shape[0], self.pred_len, x.shape[2], device=x.device, dtype=x.dtype
-        )
-        #total_prediction = torch.zeros(x.shape[0],self.seq_len + self.pred_len, x.shape[2])
+        )                                                  # [B, H, C]
 
+        # Each block fits the residual left by the previous ones.
         for i, block in enumerate(self.blocks):
-            prediction = block(residual)
+            prediction = block(residual)                   # [B, L+H, C]
 
             if i == 0:
                 residual = x[:, :self.seq_len] - prediction[:, :self.seq_len]
@@ -159,6 +163,5 @@ class Model(nn.Module):
                 residual = residual - prediction[:, :self.seq_len]
 
             total_prediction += prediction[:, self.seq_len:self.pred_len + self.seq_len]
-            #total_prediction += prediction[:,:]
 
-        return total_prediction #, bound, weight
+        return total_prediction                            # [B, H, C]

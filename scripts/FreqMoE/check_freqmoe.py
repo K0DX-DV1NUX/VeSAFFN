@@ -1,11 +1,11 @@
-"""Sanity check for models/FreqMoE.py: run from the repo root with
-    .venv/bin/python scripts/FreqMoE/check_freqmoe.py
-"""
 import sys
 import tomllib
 from pathlib import Path
 
 import torch
+
+# Shape and gradient check for FreqMoE.
+# Run from the repo root: python scripts/FreqMoE/check_freqmoe.py
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -33,9 +33,8 @@ if __name__ == "__main__":
         assert torch.isfinite(y).all()
 
         y.pow(2).mean().backward()
-        # band_boundaries gets no gradient: upstream turns it into indices via .long(), which cuts
-        # the graph (kept as-is to stay faithful to the reference code).
         dead = [n for n, p in model.named_parameters() if p.grad is None]
+        # Band boundaries are not differentiable.
         assert dead == ["moe.band_boundaries"], dead
 
         model.eval()

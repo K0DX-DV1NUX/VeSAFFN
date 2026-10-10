@@ -1,15 +1,10 @@
 #!/bin/sh
-# Online KD for FITS (d_kd_mode = online, basic): every teacher.
-# Comment out any teacher section (or a whole block) to skip it.
+# Online KD with FITS as student and every teacher.
 
 data_config="scripts/defaults/"
 gpu_config="scripts/defaults/gpu.toml"
 
-# Student toml follows the dataset's sampling frequency (see run.sh).
-
-# -------------------------
 # Teacher: DLinear
-# -------------------------
 student_config="scripts/FITS/toml/kd/online/"
 teacher_config="scripts/DLinear/toml/model.toml"
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ETTh1.toml" --teacher_config $teacher_config --student_config "$student_config/hourly.toml"
@@ -23,9 +18,7 @@ python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ELT.toml
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/METRLA.toml" --teacher_config $teacher_config --student_config "$student_config/fivemin.toml"
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/PEMSBAY.toml" --teacher_config $teacher_config --student_config "$student_config/fivemin.toml"
 
-# -------------------------
 # Teacher: FreqMoE
-# -------------------------
 student_config="scripts/FITS/toml/kd/online/"
 teacher_config="scripts/FreqMoE/toml/model.toml"
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ETTh1.toml" --teacher_config $teacher_config --student_config "$student_config/hourly.toml"
@@ -39,9 +32,7 @@ python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ELT.toml
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/METRLA.toml" --teacher_config $teacher_config --student_config "$student_config/fivemin.toml"
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/PEMSBAY.toml" --teacher_config $teacher_config --student_config "$student_config/fivemin.toml"
 
-# -------------------------
 # Teacher: FrNet
-# -------------------------
 student_config="scripts/FITS/toml/kd/online/"
 teacher_config="scripts/FrNet/toml/"
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ETTh1.toml" --teacher_config "$teacher_config/ETTh1.toml" --student_config "$student_config/hourly.toml"
@@ -55,9 +46,7 @@ python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ELT.toml
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/METRLA.toml" --teacher_config "$teacher_config/ELT_TRF.toml" --student_config "$student_config/fivemin.toml"
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/PEMSBAY.toml" --teacher_config "$teacher_config/ELT_TRF.toml" --student_config "$student_config/fivemin.toml"
 
-# -------------------------
 # Teacher: iTransformer
-# -------------------------
 student_config="scripts/FITS/toml/kd/online/"
 teacher_config="scripts/iTransformer/toml/model.toml"
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ETTh1.toml" --teacher_config $teacher_config --student_config "$student_config/hourly.toml"
@@ -71,9 +60,7 @@ python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ELT.toml
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/METRLA.toml" --teacher_config $teacher_config --student_config "$student_config/fivemin.toml"
 python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/PEMSBAY.toml" --teacher_config $teacher_config --student_config "$student_config/fivemin.toml"
 
-# -------------------------
 # Teacher: PatchTST
-# -------------------------
 student_config="scripts/FITS/toml/kd/online/"
 teacher_config="scripts/PatchTST/toml/"
 # python -u runKD.py --gpu_config $gpu_config --data_config "$data_config/ETTh1.toml" --teacher_config "$teacher_config/model1.toml" --student_config "$student_config/hourly.toml"

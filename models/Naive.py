@@ -3,15 +3,7 @@ import torch.nn as nn
 
 
 class Model(nn.Module):
-    """
-    Naive forecasting baselines.
-
-    m_naive_type = "simple":
-        Repeat the final observed value for every future time step.
-
-    m_naive_type = "ltsf":
-        Copy the final d_pred_len values from the input sequence.
-    """
+    # simple: repeat the last value. ltsf: copy the last H input steps.
     def __init__(self, configs):
         super(Model, self).__init__()
         self.seq_len = configs.d_seq_len
@@ -27,7 +19,7 @@ class Model(nn.Module):
             )
 
     def forward(self, x):
-        # x: [Batch, Input length, Channel]
+        # x: [B, L, C]
         if self.channels != x.shape[-1]:
             raise ValueError(
                 "Model configuration does not match the dataset. "
@@ -36,7 +28,7 @@ class Model(nn.Module):
             )
 
         if self.naive_type == "simple":
-            forecast = x[:, -1:, :].repeat(1, self.pred_len, 1)
+            forecast = x[:, -1:, :].repeat(1, self.pred_len, 1)     # [B, H, C]
             return forecast + (0.0 * self.dummy_param)
 
         if self.pred_len > x.shape[1]:
@@ -46,5 +38,5 @@ class Model(nn.Module):
                 f"input length={x.shape[1]}."
             )
 
-        forecast = x[:, -self.pred_len:, :]
+        forecast = x[:, -self.pred_len:, :]                         # [B, H, C]
         return forecast + (0.0 * self.dummy_param)

@@ -1,10 +1,10 @@
 #!/bin/sh
+# Standalone training and testing on every dataset, seeds 2021-2023.
 
 model_config="scripts/FITS/toml/standalone/"
 data_config="scripts/defaults/"
 gpu_config="scripts/defaults/gpu.toml"
 
-# base_T (samples per dominant period): hourly=24, ETTm=96, 10-min=144, 5-min=288
 python -u runExp.py --gpu_config $gpu_config --data_config "$data_config/ETTh1.toml" --model_config "$model_config/hourly.toml"
 python -u runExp.py --gpu_config $gpu_config --data_config "$data_config/ETTh2.toml" --model_config "$model_config/hourly.toml"
 python -u runExp.py --gpu_config $gpu_config --data_config "$data_config/ETTm1.toml" --model_config "$model_config/ett_15min.toml"

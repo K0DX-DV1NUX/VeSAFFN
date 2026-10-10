@@ -1,4 +1,7 @@
 import argparse
+
+
+# Parses yes/no style strings for argparse.
 def str2bool(v):
     if isinstance(v, bool):
         return v

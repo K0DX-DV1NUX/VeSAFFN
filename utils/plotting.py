@@ -4,7 +4,6 @@ import os
 import numpy as np
 
 
-# Global plotting style
 sns.set_theme(style="whitegrid", context="paper")
 sns.set_palette("colorblind")
 
@@ -21,6 +20,7 @@ plt.rcParams.update({
 
 
 def plot_results(args, preds, trues, zoom_to=300):
+    # Plots the last channel: full test series and the first zoom_to steps.
 
     plot_path = os.path.join("./plots", args.d_setting)
     os.makedirs(plot_path, exist_ok=True)
@@ -48,9 +48,6 @@ def plot_results(args, preds, trues, zoom_to=300):
 
     plt.close(fig)
 
-    # -----------------------------
-    # Zoomed forecast (first zoom_to=300)
-    # -----------------------------
     zoom_n = min(zoom_to, len(preds))
 
     fig, ax = plt.subplots()

@@ -8,7 +8,6 @@ import math
 class PositionalEmbedding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super(PositionalEmbedding, self).__init__()
-        # Compute the positional encodings once in log space.
         pe = torch.zeros(max_len, d_model).float()
         pe.require_grad = False
 
@@ -165,27 +164,24 @@ class DataEmbedding_wo_temp(nn.Module):
     
     
 class DataEmbedding_inverted(nn.Module):
+    # Embeds each variate's whole series as one token (iTransformer).
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding_inverted, self).__init__()
         self.value_embedding = nn.Linear(c_in, d_model)
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
-        x = x.permute(0, 2, 1)
-        # x: [Batch Variate Time]
+        # x: [B, L, N], x_mark: [B, L, M]
+        x = x.permute(0, 2, 1)                                                      # [B, N, L]
         if x_mark is None:
-            x = self.value_embedding(x)
+            x = self.value_embedding(x)                                             # [B, N, E]
         else:
-            # the potential to take covariates (e.g. timestamps) as tokens
-            x = self.value_embedding(torch.cat([x, x_mark.permute(0, 2, 1)], 1)) 
-        # x: [Batch Variate d_model]
+            x = self.value_embedding(torch.cat([x, x_mark.permute(0, 2, 1)], 1))    # [B, N+M, L] -> [B, N+M, E]
         return self.dropout(x)
     
 
 
-# Copied on 4-May-2026 from https://github.com/TangPeiwang/PatchMLP/blob/main/layers/Embed.py
 class EmbLayer(nn.Module):
-
     def __init__(self, patch_len, patch_step, seq_len, d_model):
         super().__init__()
         self.patch_len = patch_len
@@ -212,9 +208,7 @@ class EmbLayer(nn.Module):
         return x
 
 
-# Copied on 4-May-2026 from https://github.com/TangPeiwang/PatchMLP/blob/main/layers/Embed.py
 class Emb(nn.Module):
-
     def __init__(self, seq_len, d_model, patch_len=[48, 24, 12, 6]):
         super().__init__()
         patch_step = patch_len

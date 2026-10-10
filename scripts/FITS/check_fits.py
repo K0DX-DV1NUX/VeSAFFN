@@ -1,11 +1,11 @@
-"""Sanity check for models/FITS.py: run from the repo root with
-    .venv/bin/python scripts/FITS/check_fits.py
-"""
 import sys
 import tomllib
 from pathlib import Path
 
 import torch
+
+# Shape and gradient check for FITS with every standalone toml.
+# Run from the repo root: python scripts/FITS/check_fits.py
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -32,7 +32,6 @@ if __name__ == "__main__":
 
                 y = model(x)
                 assert torch.is_tensor(y), "forward must return a single tensor (exp_main expects that)"
-                # FITS emits look-back + horizon; exp_main keeps the last pred_len steps.
                 assert y.shape == (4, cfg.d_seq_len + pred_len, cfg.d_in_features), y.shape
                 assert y[:, -pred_len:].shape == (4, pred_len, cfg.d_in_features)
                 assert torch.isfinite(y).all()

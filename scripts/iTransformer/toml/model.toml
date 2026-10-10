@@ -1,10 +1,9 @@
-
 [default]
 # Model
 d_model = "iTransformer"
 d_model_input_type = "x_mark_dec_incld"
 
-# Other params
+# Architecture
 m_e_layers = 2
 m_n_heads = 8
 m_d_model = 256
@@ -17,9 +16,7 @@ m_class_strategy = "projection"
 m_factor = 1
 m_activation = "gelu"
 
-# -------------------------
-# Runs
-# -------------------------
+# One run per prediction horizon; d_test_stride = d_pred_len gives non-overlapping test windows.
 [[runs]]
 d_seq_len = 336
 d_pred_len = 96

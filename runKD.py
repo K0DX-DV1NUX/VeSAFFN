@@ -12,8 +12,6 @@ from utils.plotting import plot_results
 
 
 def main():
-    # KD mode (online/offline) and type (basic/timedistill) come from the
-    # student's toml (d_kd_mode, d_kd_type) and are validated by KDConfig.
     parser = argparse.ArgumentParser(description="Knowledge Distillation Runner (online or offline)")
     parser.add_argument("--data_config", type=str, required=True, help="Path to experiment TOML config for dataset.")
     parser.add_argument("--gpu_config", type=str, required=True, help="Path to experiment TOML config for gpu settings.")
@@ -21,9 +19,6 @@ def main():
     parser.add_argument("--student_config", type=str, required=True, help="Path to experiment TOML config for the KD student model.")
     args = parser.parse_args()
 
-    # -------------------------
-    # Load Running Configurations.
-    # -------------------------
     def load_toml(path):
         with open(path, "rb") as f:
             configs = tomllib.load(f)
@@ -34,39 +29,18 @@ def main():
     teacher_values = load_toml(args.teacher_config)
     student_values = load_toml(args.student_config)
 
+    # The teacher's own per-horizon m_* settings.
     def teacher_run_overrides(pred_len):
-        '''
-        The teacher may tune its own architecture per-horizon in its own
-        model.toml (e.g. iTransformer widening m_d_model at longer
-        pred_len). Find the teacher run matching this pred_len and return
-        only its model-config ("m_*") keys, so the student's run -- which
-        owns d_seq_len/d_pred_len/d_test_stride for the grid being iterated
-        -- is never overwritten.
-        '''
         for t_run in teacher_values.get("runs", []):
             if t_run.get("d_pred_len") == pred_len:
                 return {k: v for k, v in t_run.items() if k.startswith("m_")}
         return {}
 
-    # -------------------------
-    # Run Experiments.
-    # Seed Values = 2021, 2022, 2023
-    #
-    # The channel/window grid to iterate is driven by the student's runs;
-    # the teacher shares the same seq_len/pred_len/test_stride for each run
-    # so both models train on identical batches, while keeping its own
-    # architecture (m_*) settings from teacher_config[default] (plus any
-    # per-horizon override from its own runs -- see teacher_run_overrides).
-    #
-    # Order of Priority follows:
-    # data_config[default] < gpu_config < {teacher,student}_config[default] < run
-    # -------------------------
+    # The student's runs drive the grid; seeds 2021-2023.
     for run in student_values["runs"]:
         for d_seed in range(2021, 2024):
 
-            # Only the dataset/window keys (d_seq_len, d_pred_len, d_test_stride)
-            # are shared with the teacher -- the student's own m_* overrides for
-            # this run must not leak into the teacher's architecture.
+            # Teacher shares the student's d_* keys, keeps its own m_* keys.
             shared_window = {k: v for k, v in run.items() if k.startswith("d_")}
 
             teacher_merged = {
@@ -86,6 +60,7 @@ def main():
             teacher_cfgs = ExpConfig(**teacher_merged)
             student_cfgs = KDConfig(**student_merged)
 
+            # Pick the KD experiment from d_kd_mode / d_kd_type.
             if student_cfgs.d_kd_type == "timedistill":
                 Exp_KD_Class = Exp_TimeDistill_Offline
             elif student_cfgs.d_kd_mode == "online":
@@ -97,28 +72,19 @@ def main():
             torch.manual_seed(d_seed)
             np.random.seed(d_seed)
 
-            # --------------------------------
-            # Set the GPU settings. Identical for teacher and student, since
-            # both merges pull from the same gpu_config.
-            # --------------------------------
+            # Fall back to CPU if CUDA is unavailable.
             for cfgs in (teacher_cfgs, student_cfgs):
                 cfgs.d_use_gpu = True if torch.cuda.is_available() and cfgs.d_use_gpu else False
                 if cfgs.d_use_gpu and cfgs.d_use_multi_gpu:
                     cfgs.d_devices = [int(device_id) for device_id in cfgs.d_devices]
                     cfgs.d_gpu = cfgs.d_devices[0]
 
-            # --------------------------------
-            # Print the arguments for the experiment.
-            # This is useful for logging and reproducibility.
-            # --------------------------------
             print('Teacher configuration in experiment:')
             print(teacher_cfgs)
             print('Student configuration in experiment:')
             print(student_cfgs)
 
-            # Basic KD keeps its original 'KD-<mode>-...' setting names so
-            # existing checkpoints/results still line up; TimeDistill gets its
-            # own prefix so it never overwrites basic offline KD's checkpoints.
+            # Run name, used for checkpoints and results.
             setting = '{}-{}-{}-{}-{}-ft{}-sl{}-pl{}-seed{}'.format(
                 "KD" if student_cfgs.d_kd_type == "basic" else "TimeDistill",
                 student_cfgs.d_kd_mode,
@@ -133,18 +99,10 @@ def main():
             teacher_cfgs.d_setting = setting
             student_cfgs.d_setting = setting
 
-            # --------------------------------
-            # Prepare directories. Teacher and student share the same
-            # setting, so a single call covers both.
-            # --------------------------------
             check_and_prepare_dirs(student_cfgs)
 
-            # --------------------------------
-            # RUN EXPERIMENT.
-            # --------------------------------
             exp = Exp_KD_Class(teacher_cfgs, student_cfgs)
 
-            # If training is enabled.
             if student_cfgs.d_is_training:
                     print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
                     exp.train(setting)
@@ -152,14 +110,10 @@ def main():
             print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
             preds, trues = exp.test(setting)
 
-            # If output needs to be inverse transformed.
             if student_cfgs.d_inverse_transform:
                 preds = inverse_transform(student_cfgs, preds)
                 trues = inverse_transform(student_cfgs, trues)
 
-            # --------------------------------
-            # Save and plot results (student's, the deliverable of a KD run).
-            # --------------------------------
             save_results(student_cfgs, preds, trues)
             if student_cfgs.d_plot_results:
                 plot_results(student_cfgs, preds, trues, zoom_to=400)

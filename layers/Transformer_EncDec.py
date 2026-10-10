@@ -24,6 +24,7 @@ class ConvLayer(nn.Module):
 
 
 class EncoderLayer(nn.Module):
+    # Self-attention + FFN, each with residual and LayerNorm.
     def __init__(self, attention, d_model, d_ff=None, dropout=0.1, activation="relu"):
         super(EncoderLayer, self).__init__()
         d_ff = d_ff or 4 * d_model
@@ -36,21 +37,24 @@ class EncoderLayer(nn.Module):
         self.activation = F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None, tau=None, delta=None):
+        # x: [B, N, E]
         new_x, attn = self.attention(
             x, x, x,
             attn_mask=attn_mask,
             tau=tau, delta=delta
-        )
+        )                                                                   # [B, N, E]
         x = x + self.dropout(new_x)
 
+        # Position-wise FFN as two 1x1 convs.
         y = x = self.norm1(x)
-        y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))
-        y = self.dropout(self.conv2(y).transpose(-1, 1))
+        y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))   # [B, d_ff, N]
+        y = self.dropout(self.conv2(y).transpose(-1, 1))                    # [B, N, E]
 
         return self.norm2(x + y), attn
 
 
 class Encoder(nn.Module):
+    # Stack of encoder layers; keeps x as [B, N, E].
     def __init__(self, attn_layers, conv_layers=None, norm_layer=None):
         super(Encoder, self).__init__()
         self.attn_layers = nn.ModuleList(attn_layers)
@@ -58,7 +62,6 @@ class Encoder(nn.Module):
         self.norm = norm_layer
 
     def forward(self, x, attn_mask=None, tau=None, delta=None):
-        # x [B, L, D]
         attns = []
         if self.conv_layers is not None:
             for i, (attn_layer, conv_layer) in enumerate(zip(self.attn_layers, self.conv_layers)):

@@ -1,34 +1,26 @@
 [default]
-# Model Information.
+# Model
 d_model = "DLinear"
 d_model_input_type = "x_only"
-m_individual = 1 # Allows each feature to have its own Linear Layer.
 
+# Architecture
+m_individual = 1
 
-# -------------------------
-# Datasets
-# -------------------------
-# -------------------------
-# Datasets
-# -------------------------
+# One run per prediction horizon; d_test_stride = d_pred_len gives non-overlapping test windows.
 [[runs]]
 d_seq_len = 336
 d_pred_len = 96
 d_test_stride = 48
-
-
 
 [[runs]]
 d_seq_len = 336
 d_pred_len = 192
 d_test_stride = 192
 
-
 [[runs]]
 d_seq_len = 336
 d_pred_len = 336
 d_test_stride = 336
-
 
 [[runs]]
 d_seq_len = 336

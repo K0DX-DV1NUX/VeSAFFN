@@ -9,10 +9,7 @@ import torch
 from base.config import ExpConfig
 from exp.exp_params import Exp_Params
 
-# -------------------------------------------------
-# Model profiled by runParams.py, mapped to the model.toml variant each one
-# trains with on ETTh1 (see the corresponding scripts/<Model>/run.sh).
-# -------------------------------------------------
+# Model -> model toml used for profiling.
 MODEL_CONFIGS = {
     "DLinear": "scripts/DLinear/toml/model.toml",
     "FrNet": "scripts/FrNet/toml/ETTh1.toml",
@@ -21,14 +18,9 @@ MODEL_CONFIGS = {
     "FreqMoE": "scripts/FreqMoE/toml/model.toml",
     "PatchTST": "scripts/PatchTST/toml/model1.toml",
     "Vesa": "scripts/Vesa/toml/standalone/model1.toml",
-    # Chronos-2 is a fixed, pretrained zero-shot forecaster (no per-horizon
-    # architecture tuning), so its model.toml carries no "m_*" overrides --
-    # see scripts/Chronos2/toml/model.toml.
     "Chronos2": "scripts/Chronos2/toml/model.toml",
 }
 
-# Forward-pass-only profiling has no training dynamics, so a single fixed
-# seed is enough for reproducibility.
 PARAMS_SEED = 2021
 
 
@@ -38,14 +30,7 @@ def load_toml(path):
 
 
 def model_run_overrides(model_values, pred_len):
-    '''
-    Some models tune their architecture per-horizon in model.toml (e.g.
-    iTransformer widens m_d_model for longer pred_len, FrNet changes
-    m_period_list). Find the model.toml run matching this pred_len and
-    return only its model-config ("m_*") keys, so the params.toml run --
-    which owns d_seq_len/d_pred_len/channels for the profiling grid --
-    is never overwritten.
-    '''
+    # The model's own per-horizon m_* settings.
     for run in model_values.get("runs", []):
         if run.get("d_pred_len") == pred_len:
             return {k: v for k, v in run.items() if k.startswith("m_")}
@@ -77,10 +62,7 @@ def main():
         for run in params_values["runs"]:
             overrides = model_run_overrides(model_values, run["d_pred_len"])
 
-            # -------------------------
-            # Order of Priority follows:
-            # params_config[default] < gpu_config < model_config[default] < model_config[runs] < params_config[runs]
-            # -------------------------
+            # Priority: params default < gpu < model default < model run < params run.
             merged = {
                 **params_values['default'],
                 **gpu_values.get('gpu', {}),
@@ -126,10 +108,7 @@ def main():
 
             torch.cuda.empty_cache()
 
-    # -------------------------
-    # A single shared CSV, overwritten each run -- unlike Exp_Main, which
-    # appends to a Result_{model}.csv per model.
-    # -------------------------
+    # One CSV, overwritten each run.
     df = pd.DataFrame(rows)
     df.to_csv(args.output, index=False)
     print('Saved {} rows to {}'.format(len(df), args.output))

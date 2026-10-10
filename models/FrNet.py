@@ -8,6 +8,9 @@ import numpy as np
 from layers.RevIN import RevIN
 from layers.PatchTST_layers import series_decomp
 
+# FrNet: period-based patching with frequency-rotation layers.
+# Shapes: B = batch, C = channels, L = seq_len, H = pred_len, N = patches, P = patch length, E = emb, D = E/2+1.
+
 
 class Model(nn.Module):
     def __init__(self, configs):
@@ -23,9 +26,8 @@ class Model(nn.Module):
         self.revin_layer = RevIN(self.c_in, affine=configs.m_affine, subtract_last=configs.m_subtract_last)
         self.trend_revin_layer = RevIN(self.c_in, affine=configs.m_affine, subtract_last=configs.m_subtract_last)
         self.period_list = configs.m_period_list
-        self.emb = configs.m_emb # is important for Transformer Attention
+        self.emb = configs.m_emb
         
-        # model
         self.model = FRNet_backone(
             self.c_in, self.seq_len, self.pred_len, self.emb, configs.m_use_norm,
             configs.m_dropout, configs.m_e_layers,
@@ -51,21 +53,23 @@ class Model(nn.Module):
         )
 
     def forward(self, x):
+        # x: [B, L, C]
         if self.decomposition:
-            res_init, trend_init = self.decomp_module(x)
-            res_init, trend_init = res_init.permute(0,2,1), trend_init.permute(0,2,1)  # x: [Batch, Channel, Input length]
-            res = self.model(res_init)
-            trend = self.model_trend(trend_init)
+            res_init, trend_init = self.decomp_module(x)                                # [B, L, C] each
+            res_init, trend_init = res_init.permute(0,2,1), trend_init.permute(0,2,1)  # [B, C, L] each
+            res = self.model(res_init)                                                  # [B, C, H]
+            trend = self.model_trend(trend_init)                                        # [B, C, H]
             x = res + trend
-            x = x.permute(0,2,1)    # x: [Batch, Input length, Channel]
+            x = x.permute(0,2,1)                                                        # [B, H, C]
         else:
-            x = x.permute(0,2,1)    # x: [Batch, Channel, Input length]
-            x = self.model(x)
-            x = x.permute(0,2,1)    # x: [Batch, Input length, Channel]
+            x = x.permute(0,2,1)                                                        # [B, C, L]
+            x = self.model(x)                                                           # [B, C, H]
+            x = x.permute(0,2,1)                                                        # [B, H, C]
     
         return x
   
 class FRNet_backone(nn.Module):
+    # Seasonal branch: one FRBackbone per period in period_list.
     def __init__(self, c_in, seq_len, pred_len, emb, revin, dropout, e_layers, pred_head_type, aggregation_type, channel_attention, global_freq_pred, period_list):
         super().__init__()
         self.period_list = period_list
@@ -74,9 +78,7 @@ class FRNet_backone(nn.Module):
         self.channels = c_in
         self.revin = revin
         self.channel_attention = channel_attention
-        #Complex Rotate
         self.FRBackboneList = nn.ModuleList() 
-        # #FITS
         self.global_freq_pred = global_freq_pred
         if self.global_freq_pred:
             self.dominance_freq=int(self.seq_len // self.period_list[0] + 1) * 2 + 10 
@@ -95,48 +97,42 @@ class FRNet_backone(nn.Module):
                 self.fuse_linear = nn.Linear(pred_len*len(self.period_list), pred_len)
         
     def forward(self, x):
-        # norm
+        # x: [B, C, L]
         if self.revin: 
             x = x.permute(0,2,1)
             x = self.revin_layer(x, 'norm')
             x = x.permute(0,2,1)
-        res = [] #存放不同topk周期
+        res = []  # per-branch forecasts, each [B, C, H]
         if self.global_freq_pred:
-            # if self.channel_attention:
-            #     x = self.fit_channelfuse(x, x, x)[0]
-            low_specx = torch.fft.rfft(x, dim=-1)
-            low_specx[:,:,self.dominance_freq:]=0 # LPF截断
-            low_specx = low_specx[:,:,0:self.dominance_freq] # LPF
-            # print(low_specx.permute(0,2,1).shape, self.freq_Linear)
-            low_specxy_ = self.freq_Linear(low_specx)
-            low_specxy = torch.zeros([low_specxy_.size(0), low_specxy_.size(1), int((self.pred_len)/2+1)],dtype=low_specxy_.dtype).to(low_specxy_.device)
+            low_specx = torch.fft.rfft(x, dim=-1)  # [B, C, L/2+1]
+            low_specx[:,:,self.dominance_freq:]=0
+            low_specx = low_specx[:,:,0:self.dominance_freq]  # [B, C, F]
+            low_specxy_ = self.freq_Linear(low_specx)  # [B, C, F*H/L]
+            low_specxy = torch.zeros([low_specxy_.size(0), low_specxy_.size(1), int((self.pred_len)/2+1)],dtype=low_specxy_.dtype).to(low_specxy_.device)  # [B, C, H/2+1]
 
             low_specxy[:,:,0:low_specxy_.size(-1)]=low_specxy_ 
-            low_xy=torch.fft.irfft(low_specxy, dim=-1)
-            # low_xy=low_xy * self.length_ratio # compemsate the length change
+            low_xy=torch.fft.irfft(low_specxy, dim=-1)  # [B, C, H]
             res.append(low_xy)
         
         for k in range(len(self.period_list)):
             length = self.seq_len
             period_i = self.period_list[k]
-            # reshape [b, l , c]
             if length % period_i != 0:
                 new_length = (length // period_i) * period_i
                 x_k = x[:, :, -new_length:]
             else:
                 new_length = length
                 x_k = x
-            x_k = x_k.unfold(dimension=-1, size=period_i, step=period_i)    # [b, c, l] -> [b,c,n,p] # stride = period_i
-            # model
-            pred_k = self.FRBackboneList[k](x_k)                                                                # z: [bs x nvars x d_model x patch_num]
+            x_k = x_k.unfold(dimension=-1, size=period_i, step=period_i)  # [B, C, N, P]
+            pred_k = self.FRBackboneList[k](x_k)  # [B, C, H]
             res.append(pred_k)
         if self.aggregation_type == 'linear':
-            concatenated_res = torch.cat(res, dim=-1)
-            res = self.fuse_linear(concatenated_res)
+            concatenated_res = torch.cat(res, dim=-1)  # [B, C, K*H]
+            res = self.fuse_linear(concatenated_res)  # [B, C, H]
         elif self.aggregation_type == 'avg':
-            concatenated_res = torch.stack(res, dim=-1)
+            concatenated_res = torch.stack(res, dim=-1)  # [B, C, H, K]
             num = len(self.period_list) + 1 if self.global_freq_pred else len(self.period_list)
-            res = torch.sum(concatenated_res * (1 / num), -1)
+            res = torch.sum(concatenated_res * (1 / num), -1)  # [B, C, H]
         if self.revin: 
             res = res.permute(0,2,1)
             res = self.revin_layer(res, 'denorm')
@@ -144,10 +140,9 @@ class FRNet_backone(nn.Module):
         return res
 
 class FRNet_trend_backone(nn.Module):
+    # Trend branch: one FRTrendBackbone per overlapping patch size.
     def __init__(self, c_in, seq_len, pred_len, emb, revin, dropout, e_layers, pred_head_type, aggregation_type, channel_attention, global_freq_pred, patch_len, stride):
         super().__init__()
-        # self.patch_len = patch_len
-        # self.stride = stride
         self.seq_len = seq_len
         self.pred_len = pred_len
         self.channels = c_in
@@ -155,9 +150,7 @@ class FRNet_trend_backone(nn.Module):
         self.channel_attention = channel_attention
         self.patch_list = [32, 64]
         self.stride_list = [16, 32]
-        #Complex Rotate
         self.FRBackboneList = nn.ModuleList() 
-        # #FITS
         self.global_freq_pred = global_freq_pred
         if self.global_freq_pred:
             self.dominance_freq=int(self.seq_len // self.patch_list[0] + 1) * 2 + 10 
@@ -176,44 +169,38 @@ class FRNet_trend_backone(nn.Module):
                 self.fuse_linear = nn.Linear(pred_len*len(self.patch_list), pred_len)
         
     def forward(self, x):
-        # norm
+        # x: [B, C, L]
         if self.revin: 
             x = x.permute(0,2,1)
             x = self.revin_layer(x, 'norm')
             x = x.permute(0,2,1)
-        res = [] #存放不同topk周期
+        res = []  # per-branch forecasts, each [B, C, H]
         if self.global_freq_pred:
-            # if self.channel_attention:
-            #     x = self.fit_channelfuse(x, x, x)[0]
-            low_specx = torch.fft.rfft(x, dim=-1)
-            low_specx[:,:,self.dominance_freq:]=0 # LPF截断
-            low_specx = low_specx[:,:,0:self.dominance_freq] # LPF
-            # print(low_specx.permute(0,2,1).shape, self.freq_Linear)
-            low_specxy_ = self.freq_Linear(low_specx)
-            low_specxy = torch.zeros([low_specxy_.size(0), low_specxy_.size(1), int((self.pred_len)/2+1)],dtype=low_specxy_.dtype).to(low_specxy_.device)
+            low_specx = torch.fft.rfft(x, dim=-1)  # [B, C, L/2+1]
+            low_specx[:,:,self.dominance_freq:]=0
+            low_specx = low_specx[:,:,0:self.dominance_freq]  # [B, C, F]
+            low_specxy_ = self.freq_Linear(low_specx)  # [B, C, F*H/L]
+            low_specxy = torch.zeros([low_specxy_.size(0), low_specxy_.size(1), int((self.pred_len)/2+1)],dtype=low_specxy_.dtype).to(low_specxy_.device)  # [B, C, H/2+1]
 
             low_specxy[:,:,0:low_specxy_.size(-1)]=low_specxy_ 
-            low_xy=torch.fft.irfft(low_specxy, dim=-1)
-            # low_xy=low_xy * self.length_ratio # compemsate the length change
+            low_xy=torch.fft.irfft(low_specxy, dim=-1)  # [B, C, H]
             res.append(low_xy)
         
         for k in range(len(self.patch_list)):
             length = self.seq_len
             stride_i = self.stride_list[k]
             patch_i = self.patch_list[k]
-            # reshape [b, l , c]
             x_k = x
-            x_k = x_k.unfold(dimension=-1, size=patch_i, step=stride_i)    # [b, c, l] -> [b,c,n,p] # stride = patch_i / 2 
-            # model
-            pred_k = self.FRBackboneList[k](x_k)                                                                # z: [bs x nvars x d_model x patch_num]
+            x_k = x_k.unfold(dimension=-1, size=patch_i, step=stride_i)  # [B, C, N, P]
+            pred_k = self.FRBackboneList[k](x_k)  # [B, C, H]
             res.append(pred_k)
         if self.aggregation_type == 'linear':
-            concatenated_res = torch.cat(res, dim=-1)
-            res = self.fuse_linear(concatenated_res)
+            concatenated_res = torch.cat(res, dim=-1)  # [B, C, K*H]
+            res = self.fuse_linear(concatenated_res)  # [B, C, H]
         elif self.aggregation_type == 'avg':
-            concatenated_res = torch.stack(res, dim=-1)
+            concatenated_res = torch.stack(res, dim=-1)  # [B, C, H, K]
             num = len(self.patch_list) + 1 if self.global_freq_pred else len(self.patch_list)
-            res = torch.sum(concatenated_res * (1 / num), -1)
+            res = torch.sum(concatenated_res * (1 / num), -1)  # [B, C, H]
         if self.revin: 
             res = res.permute(0,2,1)
             res = self.revin_layer(res, 'denorm')
@@ -221,6 +208,7 @@ class FRNet_trend_backone(nn.Module):
         return res
 
 class FRTrendBackbone(nn.Module):
+    # Same as FRBackbone, but on overlapping patches and without a truncation head.
     def __init__(self, patch_len, stride_len, c_in, seq_len, pred_len, emb, dropout, e_layers, channel_attention):
         super(FRTrendBackbone, self).__init__()
         self.patch_len = patch_len
@@ -249,41 +237,33 @@ class FRTrendBackbone(nn.Module):
         return x, x_var, x_mean 
         
     def forward(self, x):
-        x = self.dropout(self.W_P(x)) + self.W_pos
+        x = self.dropout(self.W_P(x)) + self.W_pos  # [B, C, N, P] -> [B, C, N, E]
         B, C, N, E = x.size() 
-        # Channel_Mix
         if self.channel_attention:
-            x = torch.reshape(x, (B, C, N*E)) 
+            x = torch.reshape(x, (B, C, N*E))   # [B, C, N*E]
             x = self.Channel_attention_layers(x,x,x)[0]
-            # x = self.Channel_encoder_layers(x)[0]
-            x = torch.reshape(x, (B, C, N, E))
-        # fft 
-        period_fft = torch.fft.rfft(x, dim=-1)
+            x = torch.reshape(x, (B, C, N, E))  # [B, C, N, E]
+        period_fft = torch.fft.rfft(x, dim=-1)  # [B, C, N, D]
         _, _, _, D = period_fft.size()  
-        # Frequency Rotation layers 
+        # Frequency rotation layers, normalised by magnitude, with residual.
         for i in range(self.e_layers):  
-            # resAdd
             period_fft_resNet = period_fft 
-            #Frequency normalization
             magnitude = torch.abs(period_fft).mean(dim=-2, keepdim=True)
             normalized_magnitude = magnitude / torch.sum(magnitude, dim=-1, keepdim=True)
             period_fft = period_fft / normalized_magnitude
-            # Frequency Rotate
-            period_fft = torch.reshape(period_fft, (B*C, N, D))     # B x C, N, D
-            period_fft = self.period_pred[i](period_fft.permute(0,2,1)).permute(0,2,1)
-            period_fft = torch.reshape(period_fft, (B, C, N, D)) 
-            # Frequency inverse normalization
+            period_fft = torch.reshape(period_fft, (B*C, N, D))  # [B*C, N, D]
+            period_fft = self.period_pred[i](period_fft.permute(0,2,1)).permute(0,2,1)  # [B*C, N, D]
+            period_fft = torch.reshape(period_fft, (B, C, N, D))   # [B, C, N, D]
             period_fft = period_fft * normalized_magnitude
             period_fft = period_fft + period_fft_resNet
-        # ifft
-        x = torch.fft.irfft(period_fft, dim=-1)
+        x = torch.fft.irfft(period_fft, dim=-1)  # [B, C, N, E]
 
-        #flatten
-        x = torch.flatten(x, start_dim=-2, end_dim=-1)
-        x = self.pred_linear(x)
+        x = torch.flatten(x, start_dim=-2, end_dim=-1)  # [B, C, N*E]
+        x = self.pred_linear(x)  # [B, C, H]
         return x
 
 class FRBackbone(nn.Module):
+    # Embeds patches, rotates them in frequency, then projects to H.
     def __init__(self, period_len, c_in, seq_len, pred_len, emb, dropout, e_layers, pred_head_type, channel_attention):
         super(FRBackbone, self).__init__()
         self.period_len = period_len
@@ -319,78 +299,66 @@ class FRBackbone(nn.Module):
         return x, x_var, x_mean 
         
     def forward(self, x):
-        x = self.dropout(self.W_P(x)) + self.W_pos
+        x = self.dropout(self.W_P(x)) + self.W_pos  # [B, C, N, P] -> [B, C, N, E]
         B, C, N, E = x.size() 
-        # Channel_Mix
         if self.channel_attention:
-            x = torch.reshape(x, (B, C, N*E)) 
+            x = torch.reshape(x, (B, C, N*E))   # [B, C, N*E]
             x = self.Channel_attention_layers(x,x,x)[0]
-            # x = self.Channel_encoder_layers(x)[0]
-            x = torch.reshape(x, (B, C, N, E))
-        # fft 
-        period_fft = torch.fft.rfft(x, dim=-1)
+            x = torch.reshape(x, (B, C, N, E))  # [B, C, N, E]
+        period_fft = torch.fft.rfft(x, dim=-1)  # [B, C, N, D]
         _, _, _, D = period_fft.size()  
-        # Frequency Rotation layers 
+        # Frequency rotation layers, normalised by magnitude, with residual.
         for i in range(self.e_layers):  
-            # resAdd
             period_fft_resNet = period_fft 
-            #Frequency normalization
             magnitude = torch.abs(period_fft).mean(dim=-2, keepdim=True)
             normalized_magnitude = magnitude / torch.sum(magnitude, dim=-1, keepdim=True)
             period_fft = period_fft / normalized_magnitude
-            # Frequency Rotate
-            period_fft = torch.reshape(period_fft, (B*C, N, D))     # B x C, N, D
-            period_fft = self.period_pred[i](period_fft.permute(0,2,1)).permute(0,2,1)
-            period_fft = torch.reshape(period_fft, (B, C, N, D)) 
-            # Frequency inverse normalization
+            period_fft = torch.reshape(period_fft, (B*C, N, D))  # [B*C, N, D]
+            period_fft = self.period_pred[i](period_fft.permute(0,2,1)).permute(0,2,1)  # [B*C, N, D]
+            period_fft = torch.reshape(period_fft, (B, C, N, D))   # [B, C, N, D]
             period_fft = period_fft * normalized_magnitude
             period_fft = period_fft + period_fft_resNet
-        # ifft
-        x = torch.fft.irfft(period_fft, dim=-1)
+        x = torch.fft.irfft(period_fft, dim=-1)  # [B, C, N, E]
         
         if self.pred_head_type == 'truncation':
-            #最后一层预测    
-            period_fft = torch.fft.rfft(x, dim=-1)
+            period_fft = torch.fft.rfft(x, dim=-1)  # [B, C, N, D]
             _, _, _, D = period_fft.size()  
-            # 归一化
             magnitude = torch.abs(period_fft).mean(dim=-2, keepdim=True)
             normalized_magnitude = magnitude / torch.sum(magnitude, dim=-1, keepdim=True)
             period_fft = period_fft / normalized_magnitude
-            # Frequency Rotate
-            period_fft = torch.reshape(period_fft, (B*C, N, D))     # B x C, N, D
-            period_fft = self.pred_head(period_fft.permute(0,2,1)).permute(0,2,1)
-            period_fft = torch.reshape(period_fft, (B, C, self.period_output_len, D)) 
-            # 反归一化
+            period_fft = torch.reshape(period_fft, (B*C, N, D))  # [B*C, N, D]
+            period_fft = self.pred_head(period_fft.permute(0,2,1)).permute(0,2,1)  # [B*C, N_out, D]
+            period_fft = torch.reshape(period_fft, (B, C, self.period_output_len, D))   # [B, C, N_out, D]
             period_fft = period_fft * normalized_magnitude
-            x = torch.fft.irfft(period_fft, dim=-1)  
-        #flatten
-        x = torch.flatten(x, start_dim=-2, end_dim=-1)
-        x = self.pred_linear(x)
+            x = torch.fft.irfft(period_fft, dim=-1)  # [B, C, N_out, E]
+        x = torch.flatten(x, start_dim=-2, end_dim=-1)  # [B, C, N*E]
+        x = self.pred_linear(x)  # [B, C, H]
         return x
         
 class Period_Frequency_Mixer_Predictor(nn.Module):
+    # Complex mixing across patches, then across frequencies, with residuals.
     def __init__(self, in_features, out_features, frequency_num):
         super(Period_Frequency_Mixer_Predictor, self).__init__()
         self.linear_1 =  nn.Linear(in_features, out_features).to(torch.cfloat) 
         self.frequency_mix = nn.Linear(frequency_num, frequency_num).to(torch.cfloat) 
     def forward(self, x):
-        # print(input.shape, self.linear_1)
         output = self.linear_1(x) + x
         output = self.frequency_mix(output.permute(0,2,1)).permute(0,2,1) + output
         return  output
     
 class Period_Frequency_Mixer_PredictorHead(nn.Module):
+    # Same mixer, mapping N input patches to N_out patches.
     def __init__(self, in_features, out_features, frequency_num):
         super(Period_Frequency_Mixer_PredictorHead, self).__init__()
         self.linear_1 =  nn.Linear(in_features, out_features).to(torch.cfloat) 
         self.frequency_mix = nn.Linear(frequency_num, frequency_num).to(torch.cfloat) 
     def forward(self, x):
-        # print(input.shape, self.linear_1)
         output = self.linear_1(x)
         output = self.frequency_mix(output.permute(0,2,1)).permute(0,2,1) + output
         return  output
 
 class ChannelAttentionLayer(nn.Module):
+    # Multi-head attention across channels.
     def __init__(self, attention, d_model, n_heads, d_keys=None,
                  d_values=None):
         super(ChannelAttentionLayer, self).__init__()

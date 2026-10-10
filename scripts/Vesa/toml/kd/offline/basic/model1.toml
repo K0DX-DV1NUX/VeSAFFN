@@ -1,40 +1,37 @@
 [default]
-# Model Information.
+# Model
 d_model = "Vesa"
 d_model_input_type = "x_only"
+
 # Knowledge distillation
 d_kd_mode = "offline"
 d_kd_type = "basic"
 
 # RevIN
 m_use_norm = true
+
+# false: shared scales, true: per-channel scales
 m_individual = false
 
-# Shared VeRA basis
+# FFN hidden dim D and rank r
 m_seq_dim = 256
 m_vesa_rank = 16
 
-
-# -------------------------
-# Datasets
-# -------------------------
+# One run per prediction horizon; d_test_stride = d_pred_len gives non-overlapping test windows.
 [[runs]]
 d_seq_len = 336
 d_pred_len = 96
 d_test_stride = 96
-
 
 [[runs]]
 d_seq_len = 336
 d_pred_len = 192
 d_test_stride = 192
 
-
 [[runs]]
 d_seq_len = 336
 d_pred_len = 336
 d_test_stride = 336
-
 
 [[runs]]
 d_seq_len = 336

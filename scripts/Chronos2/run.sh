@@ -1,4 +1,5 @@
 #!/bin/sh
+# Zero-shot testing on every dataset.
 
 model_config="scripts/Chronos2/toml/model.toml"
 data_config="scripts/defaults/"

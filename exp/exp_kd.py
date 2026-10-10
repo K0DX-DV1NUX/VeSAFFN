@@ -17,10 +17,7 @@ from utils.learning_rates import adjust_learning_rate
 from utils.metrics import metric
 
 
-# Allowed online KD teachers: models that can be trained jointly with the
-# student. Chronos-2 can never appear here -- it has no trainable weights of
-# its own (see models/Chronos2.py, d_pretrained=true), so "training" it
-# jointly is meaningless.
+# Teachers allowed in online KD.
 TEACHER_MODELS = {
     'PatchTST': PatchTST,
     'iTransformer': iTransformer,
@@ -29,25 +26,20 @@ TEACHER_MODELS = {
     'FreqMoE': FreqMoE,
 }
 
-# Allowed offline KD teachers: everything online allows, plus Chronos-2,
-# since offline mode never trains the teacher either way.
+# Teachers allowed in offline KD.
 OFFLINE_TEACHER_MODELS = {
     **TEACHER_MODELS,
     'Chronos2': Chronos2,
 }
 
+# Students allowed in KD.
 STUDENT_MODELS = {
     'Vesa': Vesa,
-    # FITS emits look-back + horizon; _forward keeps only the last pred_len steps.
     'FITS': FITS,
 }
 
 
-# -------------------------------------------------
-# Free functions shared by Exp_KD (online) and Exp_KD_Offline. None of these
-# need any per-experiment state beyond the args/device passed in, so they're
-# plain functions rather than methods duplicated across both classes.
-# -------------------------------------------------
+# Helpers shared by Exp_KD and Exp_KD_Offline.
 
 def _acquire_device(args):
     if args.d_use_gpu:
@@ -119,6 +111,7 @@ def _get_inputs(device, args, x, y, x_mark, y_mark):
     batch_x = x.float().to(device)
     batch_y = y.float().to(device)
 
+    # No time features for PEMS and Solar.
     if 'PEMS' in args.d_data or 'Solar' in args.d_data:
         batch_x_mark = None
         batch_y_mark = None
@@ -126,6 +119,7 @@ def _get_inputs(device, args, x, y, x_mark, y_mark):
         batch_x_mark = x_mark.float().to(device)
         batch_y_mark = y_mark.float().to(device)
 
+    # Decoder input: label_len known steps followed by pred_len zeros.
     dec_inp = torch.zeros_like(y[:, -args.d_pred_len:, :]).float()
     dec_inp = torch.cat([y[:, :args.d_label_len, :], dec_inp], dim=1).float().to(device)
 
@@ -133,6 +127,7 @@ def _get_inputs(device, args, x, y, x_mark, y_mark):
 
 
 def _model_args(input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark):
+    # x_only: (x), x_mark_incl: (x, x_mark), otherwise (x, x_mark, dec_inp, y_mark).
     input_type = input_type.lower()
     if input_type == "x_only":
         return (batch_x,)
@@ -142,12 +137,7 @@ def _model_args(input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark):
 
 
 def _forward(model, args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_context):
-    '''
-    Runs one model's forward pass and slices it to the forecast horizon.
-    Teacher and student each use their own d_model_input_type, since a
-    transformer-style teacher (e.g. iTransformer) may need the mark/dec
-    inputs a linear-style student (Vesa, FITS) does not.
-    '''
+    # Runs one model and returns the last pred_len steps, [B, H, C].
     model_input_args = _model_args(args.d_model_input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
     with amp_context:
@@ -161,12 +151,7 @@ def _forward(model, args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_cont
 
 
 class _IndexedDataset(Dataset):
-    '''
-    Wraps a dataset to also return each sample's own index. Used only for
-    Exp_KD_Offline's train_loader, so that a frozen teacher's outputs --
-    precomputed once, in dataset order -- can be looked up correctly for
-    each sample no matter how the DataLoader shuffles batch order.
-    '''
+    # Also returns each sample's index, used to look up cached teacher outputs.
     def __init__(self, dataset):
         self.dataset = dataset
 
@@ -178,14 +163,7 @@ class _IndexedDataset(Dataset):
 
 
 class _EarlyStoppingKD:
-    '''
-    Early stopping keyed off the student's ground-truth validation loss --
-    the metric that ultimately matters for the distilled model. In online
-    mode the teacher trains too, so pass it in to have its weights saved
-    alongside the student's; in offline mode the teacher is fixed and lives
-    outside the run (see Exp_KD_Offline), so it's omitted and only the
-    student gets checkpointed.
-    '''
+    # Early stopping on the student's validation loss; also saves the teacher if given.
     def __init__(self, patience=7, verbose=False, delta=0):
         self.patience = patience
         self.verbose = verbose
@@ -221,41 +199,9 @@ class _EarlyStoppingKD:
 
 
 class Exp_KD:
-    '''
-    Online knowledge-distillation experiment: a teacher and a student model
-    train together, batch by batch, on the same data, each through its own
-    optimizer stepped from one shared backward pass. The loss is an
-    unweighted sum of three terms:
-        L(gt, student) + L(gt, teacher) + L(teacher, student)
-    Ground truth supervises both models directly. The teacher-student term
-    is NOT detached on either side -- gradients from it flow into both
-    models at once, so this is genuine mutual learning: the teacher gets
-    pulled toward the student's predictions just as much as the student
-    gets pulled toward the teacher's, on top of each independently learning
-    from ground truth.
-
-    Unlike Exp_Main, this class is driven by two configs -- teacher_args and
-    student_args -- built from each model's own model.toml. Training-loop
-    level settings (batch size, epochs, dataset, learning rate, ...) are
-    guaranteed identical between the two by construction (see runKD.py) and
-    are read from student_args throughout.
-
-    Optional teacher warm-up: if student_args.d_kd_teacher_warmup_epochs is
-    set (default 0, i.e. today's "cold start" -- joint training from epoch
-    0), the first N epochs train the teacher alone on L(gt, teacher); the
-    student and the KD term sit out entirely (no forward pass, no
-    validation, no early stopping) until the teacher has had a chance to
-    reach its own accuracy. See train() for the epoch-level branch.
-
-    The teacher and student each get their own OneCycleLR schedule rather
-    than sharing one. The teacher's spans the full d_train_epochs (it
-    trains every epoch, warm-up included). The student's spans only
-    d_train_epochs - warmup_epochs and starts counting from the first
-    joint-training epoch, so when the student joins the loss it begins at
-    the same base_lr the teacher began at, instead of inheriting whatever
-    LR a single shared schedule would already have decayed to after the
-    warm-up epochs.
-    '''
+    # Online KD: teacher and student train together.
+    # loss = L(y, student) + L(y, teacher) + L(teacher, student)
+    # The teacher trains alone for the first d_kd_teacher_warmup_epochs.
 
     def __init__(self, teacher_args, student_args):
         if teacher_args.d_model not in TEACHER_MODELS:
@@ -285,28 +231,13 @@ class Exp_KD:
         self.student = STUDENT_MODELS[student_args.d_model].Model(student_args).float().to(self.device)
 
     def _select_optimizer(self):
-        '''
-        Separate optimizers per model, each stepped from the same combined
-        loss -- this is what makes the distillation "online": the teacher
-        keeps learning from ground truth in the same step that the student
-        learns from it. Kept separate (rather than one optimizer over both
-        models' params) so each model can run its own learning-rate
-        schedule: the teacher trains for the whole run and its schedule
-        should span all of d_train_epochs, while the student only starts
-        training once the teacher's warm-up ends and needs its own
-        schedule to start from base_lr at that point instead of picking up
-        wherever the teacher's schedule happens to be (see train()).
-        '''
+        # Separate optimizers so each model has its own LR schedule.
         teacher_optim = optim.Adam(self.teacher.parameters(), lr=self.student_args.d_learning_rate)
         student_optim = optim.Adam(self.student.parameters(), lr=self.student_args.d_learning_rate)
         return teacher_optim, student_optim
 
     def _kd_loss(self, teacher_out, student_out, batch_y, criterion):
-        '''
-        All three terms are summed with equal weight. Neither side of the
-        teacher-student term is detached -- gradients from it flow into
-        both models, not just the student.
-        '''
+        # Gradients of the KD term flow into both models.
         student_gt_loss = criterion(student_out, batch_y)
         teacher_gt_loss = criterion(teacher_out, batch_y)
         student_kd_loss = criterion(teacher_out, student_out)
@@ -315,10 +246,6 @@ class Exp_KD:
         return train_loss, teacher_gt_loss, student_gt_loss, student_kd_loss
 
     def vali(self, vali_loader, criterion):
-        '''
-        Validates on the student's ground-truth loss only -- the metric that
-        determines early stopping and which checkpoint is kept.
-        '''
         total_loss = []
 
         self.student.eval()
@@ -356,10 +283,7 @@ class Exp_KD:
         if self.student_args.d_use_amp:
             scaler = torch.cuda.amp.GradScaler()
 
-        # Teacher warm-up: for the first `warmup_epochs` epochs, only the
-        # teacher trains (on L(gt, teacher)); the student and the KD term
-        # sit out entirely. Defaults to 0 -- unset in a toml, this is
-        # exactly today's cold-start joint training.
+        # Teacher-only warm-up epochs.
         warmup_epochs = int(getattr(self.student_args, "d_kd_teacher_warmup_epochs", 0))
         if warmup_epochs >= self.student_args.d_train_epochs:
             print(f"Warning: d_kd_teacher_warmup_epochs ({warmup_epochs}) >= d_train_epochs "
@@ -367,12 +291,7 @@ class Exp_KD:
                   f"joint KD training runs.")
             warmup_epochs = max(0, self.student_args.d_train_epochs - 1)
 
-        # The teacher's schedule spans the whole run (it trains every
-        # epoch, warm-up included). The student's schedule spans only the
-        # epochs it actually trains for -- it is stepped for the first
-        # time on the first joint-training epoch, so it starts at the same
-        # base_lr the teacher started at, instead of inheriting whatever
-        # LR the teacher's schedule has decayed to by then.
+        # Teacher schedule spans all epochs; student schedule starts after warm-up.
         teacher_scheduler = lr_scheduler.OneCycleLR(optimizer=teacher_optim,
                                             steps_per_epoch=train_steps,
                                             pct_start=self.student_args.d_pct_start,
@@ -411,8 +330,7 @@ class Exp_KD:
                 target = batch_y[:, -self.student_args.d_pred_len:, f_dim:].to(self.device)
 
                 if in_warmup:
-                    # No student forward, no KD term -- the student is
-                    # untouched until the teacher's warm-up finishes.
+                    # Teacher only.
                     loss = teacher_gt_loss = criterion(teacher_out, target)
                     student_gt_loss = teacher_student_loss = None
                 else:
@@ -457,10 +375,8 @@ class Exp_KD:
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
 
+            # No validation or early stopping during warm-up.
             if in_warmup:
-                # Student hasn't trained yet -- skip validation/early
-                # stopping so the warm-up window doesn't eat into the
-                # patience budget meant for the joint phase.
                 print("\nEpoch: {0}, Steps: {1} | Teacher warm-up Train Loss: {2:.7f}".format(
                     epoch + 1, train_steps, train_loss))
             else:
@@ -496,11 +412,6 @@ class Exp_KD:
 
     @torch.no_grad()
     def test(self, setting):
-        '''
-        Assesses the student only. The teacher exists purely to help train
-        the student (see _kd_loss); it plays no part in validation or test
-        -- the student alone produces the final predictions.
-        '''
         if not self.student_args.d_is_training:
             print('loading model')
             checkpoint = torch.load(
@@ -530,15 +441,13 @@ class Exp_KD:
         total_test_len = self.test_loader.dataset._data_len()
         valid_pred_len = total_test_len - self.student_args.d_seq_len
 
+        # Stitch windows into one series of length len(test) - seq_len.
         def _flatten(arr):
-            # flatten all windows except the last
             flat = arr[:-1].reshape(-1, arr.shape[-1])
             remaining = valid_pred_len - flat.shape[0]
             if remaining > 0:
-                # need extra values from last window
                 flat = np.concatenate([flat, arr[-1][-remaining:]], axis=0)
             elif remaining < 0:
-                # too many values, need to trim tail
                 flat = flat[:valid_pred_len]
             return flat
 
@@ -556,40 +465,15 @@ class Exp_KD:
 
 
 def _frozen_teacher_checkpoint_path(model_name, dataset, pred_len):
-    '''
-    A fixed teacher's checkpoint is keyed by (model, dataset, pred_len), not
-    just model: most architectures' output layer is shaped by pred_len and
-    their input width by the dataset's channel count, so a single flat
-    checkpoint per model can't cover the full run grid. See
-    scripts/promote_kd_checkpoints.py for populating this layout from a
-    normal (non-KD) training run.
-    '''
+    # scripts/<Model>/pre_trained/<Dataset>/pl<PredLen>/checkpoint.pth
     return os.path.join("scripts", model_name, "pre_trained", dataset, f"pl{pred_len}", "checkpoint.pth")
 
 
 class Exp_KD_Offline:
-    '''
-    Offline knowledge-distillation experiment: the teacher is fixed and
-    never trains here. It is either a genuinely pretrained, self-contained
-    model (Chronos-2 -- see models/Chronos2.py, d_pretrained=true, which
-    loads its own frozen weights internally) or a previously-trained
-    checkpoint for PatchTST/iTransformer/FrNet/DLinear placed at
-    scripts/<Model>/pre_trained/<Dataset>/pl<PredLen>/checkpoint.pth. Only
-    the student's parameters are ever optimized.
+    # Offline KD: the teacher is frozen, only the student trains.
+    # loss = L(y, student) + L(student, teacher)
 
-    The optimized objective is an unweighted sum of two terms:
-        L(gt, student) + L(student, teacher.detach())
-    teacher_gt_loss (L(gt, teacher)) is also computed and reported every
-    logging step, purely as a diagnostic of the fixed teacher's own
-    accuracy -- it is never added to the backpropagated loss. Since the
-    teacher is frozen, that term has zero gradient with respect to every
-    trainable parameter; including it would only add a constant to the
-    reported loss value while paying the memory cost of building an
-    autograd graph through the teacher for nothing.
-    '''
-
-    # Subclasses with a different loss (e.g. Exp_TimeDistill_Offline) override
-    # this so their results don't land in the same CSV as basic offline KD.
+    # Results file prefix.
     RESULT_PREFIX = "Result"
 
     def __init__(self, teacher_args, student_args):
@@ -619,16 +503,7 @@ class Exp_KD_Offline:
         self.student = STUDENT_MODELS[student_args.d_model].Model(student_args).float().to(self.device)
 
         if self.student_args.d_is_training:
-            # The teacher is frozen and never trains in offline mode, so its
-            # output for a given window is the same in every epoch. Compute
-            # it once here (in dataset order) instead of re-running the
-            # teacher on every training iteration of every epoch -- for a
-            # cheap teacher (DLinear, etc.) that redundant work was easy to
-            # miss, but for a full pretrained model like Chronos-2 it's the
-            # difference between one pass over the data and one pass per
-            # epoch. train_loader is then rebuilt over an index-wrapped
-            # dataset so shuffled batches can still look up the right
-            # cached row per sample.
+            # Teacher outputs are computed once and cached.
             indexed_train_dataset = _IndexedDataset(self.train_loader.dataset)
             self.teacher_cache = self._build_teacher_cache(indexed_train_dataset)
             self.train_loader = DataLoader(
@@ -641,15 +516,7 @@ class Exp_KD_Offline:
             )
 
     def _build_frozen_teacher(self):
-        '''
-        Chronos-2 (d_pretrained=true) already loads its own fixed weights
-        internally -- nothing more to do. Every other allowed teacher needs
-        a locally-trained checkpoint placed at
-        scripts/<Model>/pre_trained/<Dataset>/pl<PredLen>/checkpoint.pth
-        (see the module-level docstring and scripts/promote_kd_checkpoints.py);
-        this is where "fixing" a normally-trainable model like PatchTST into
-        a static offline teacher happens, for this exact (dataset, pred_len).
-        '''
+        # Chronos2 loads its own weights; other teachers load a promoted checkpoint.
         args = self.teacher_args
         model = OFFLINE_TEACHER_MODELS[args.d_model].Model(args).float()
 
@@ -674,12 +541,7 @@ class Exp_KD_Offline:
 
     @torch.no_grad()
     def _build_teacher_cache(self, indexed_dataset):
-        '''
-        Runs the frozen teacher exactly once over every window in
-        `indexed_dataset`, in a single unshuffled pass, and returns a
-        tensor of its outputs ordered by dataset index. train() then
-        indexes into this instead of calling the teacher at all.
-        '''
+        # Returns teacher outputs ordered by dataset index, [num_samples, H, C].
         cache_loader = DataLoader(
             indexed_dataset,
             batch_size=self.student_args.d_batch_size,
@@ -703,7 +565,6 @@ class Exp_KD_Offline:
         return torch.stack(outputs, dim=0)
 
     def _select_optimizer(self):
-        # The teacher is fixed -- only the student's parameters are trained.
         return optim.Adam(self.student.parameters(), lr=self.student_args.d_learning_rate)
 
     def _kd_loss(self, teacher_out, student_out, batch_y, criterion):
@@ -711,18 +572,13 @@ class Exp_KD_Offline:
         student_kd_loss = criterion(student_out, teacher_out)
         train_loss = student_gt_loss + student_kd_loss
 
-        teacher_gt_loss = criterion(teacher_out.detach(), batch_y)  # diagnostic only, not backpropagated
+        # Logged only, not backpropagated.
+        teacher_gt_loss = criterion(teacher_out.detach(), batch_y)
 
         return train_loss, teacher_gt_loss, student_gt_loss, student_kd_loss
 
 
     def vali(self, vali_loader, criterion):
-        '''
-        Validates on the student's ground-truth loss only -- the metric that
-        determines early stopping and which checkpoint is kept. Mirrors
-        Exp_KD.vali (the teacher is fixed here anyway, so there's nothing
-        for it to do during validation).
-        '''
         total_loss = []
 
         self.student.eval()
@@ -766,7 +622,6 @@ class Exp_KD_Offline:
                                             epochs=self.student_args.d_train_epochs,
                                             max_lr=self.student_args.d_learning_rate)
 
-        # The teacher is fixed -- .eval() once, up front, and never touched again.
         self.teacher.eval()
         self.student.train()
 
@@ -785,10 +640,7 @@ class Exp_KD_Offline:
 
                 amp_context = torch.cuda.amp.autocast() if self.student_args.d_use_amp else nullcontext()
 
-                # Precomputed once in __init__ (see _build_teacher_cache) --
-                # the teacher is frozen, so its output for this window was
-                # already known before training started.
-                teacher_out = self.teacher_cache[idx].to(self.device)
+                teacher_out = self.teacher_cache[idx].to(self.device)    # [B, H, C]
                 student_out = _forward(self.student, self.student_args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_context)
 
                 f_dim = -1 if self.student_args.d_forecast_type == 'MS' else 0
@@ -827,10 +679,7 @@ class Exp_KD_Offline:
             print("\nEpoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
 
-            # No teacher= arg: the teacher never changes in offline mode, so
-            # there's no point re-saving its (possibly hundreds of MB of)
-            # weights on every improved checkpoint -- it's already pinned
-            # externally at scripts/<Model>/pre_trained/.
+            # Only the student is checkpointed.
             early_stopping(vali_loss, self.student, path)
             if early_stopping.early_stop:
                 print("Early stopping")
@@ -849,11 +698,6 @@ class Exp_KD_Offline:
 
     @torch.no_grad()
     def test(self, setting):
-        '''
-        Assesses the student only, exactly like Exp_KD.test. The teacher is
-        fixed and was already loaded once in __init__, so there's nothing
-        to reload for it here.
-        '''
         if not self.student_args.d_is_training:
             print('loading model')
             checkpoint = torch.load(
@@ -882,6 +726,7 @@ class Exp_KD_Offline:
         total_test_len = self.test_loader.dataset._data_len()
         valid_pred_len = total_test_len - self.student_args.d_seq_len
 
+        # Stitch windows into one series of length len(test) - seq_len.
         def _flatten(arr):
             flat = arr[:-1].reshape(-1, arr.shape[-1])
             remaining = valid_pred_len - flat.shape[0]

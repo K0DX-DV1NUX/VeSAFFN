@@ -3,15 +3,7 @@ import torch.nn as nn
 
 
 class Model(nn.Module):
-    """
-    Mean/median forecasting baselines.
-
-    m_stat_type = "mean":
-        Repeat the per-channel mean of the input sequence for every future step.
-
-    m_stat_type = "median":
-        Repeat the per-channel median of the input sequence for every future step.
-    """
+    # Repeats the per-channel mean or median of the input (m_stat_type).
     def __init__(self, configs):
         super(Model, self).__init__()
         self.seq_len = configs.d_seq_len
@@ -28,7 +20,7 @@ class Model(nn.Module):
             )
 
     def forward(self, x):
-        # x: [Batch, Input length, Channel]
+        # x: [B, L, C]
         if self.channels != x.shape[-1]:
             raise ValueError(
                 "Model configuration does not match the dataset. "
@@ -37,8 +29,8 @@ class Model(nn.Module):
             )
 
         if self.stat_type == "mean":
-            forecast_value = x.mean(dim=1, keepdim=True)
+            forecast_value = x.mean(dim=1, keepdim=True)            # [B, 1, C]
         else:
-            forecast_value = x.median(dim=1, keepdim=True).values
+            forecast_value = x.median(dim=1, keepdim=True).values   # [B, 1, C]
 
-        return forecast_value.repeat(1, self.pred_len, 1) + (0.0 * self.dummy_param)
+        return forecast_value.repeat(1, self.pred_len, 1) + (0.0 * self.dummy_param)  # [B, H, C]

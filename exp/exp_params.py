@@ -13,12 +13,7 @@ from utils.timefeatures import time_features
 
 
 class Exp_Params:
-    '''
-    Forward-pass-only experiment used to profile a model's size and compute
-    cost for a given configuration. Unlike Exp_Main, it never loads a real
-    dataset -- a single dummy batch is built directly from the config and
-    pushed through the model once to measure it.
-    '''
+    # Profiles params, FLOPs, size and latency on one random batch.
 
     def __init__(self, args):
         self.args = args
@@ -46,11 +41,7 @@ class Exp_Params:
         return model_dict[self.args.d_model].Model(self.args).float()
 
     def _dummy_mark(self, length):
-        '''
-        Builds a dummy time-feature tensor with the same last dimension
-        TimeSeriesDataset would produce for the configured d_freq/d_embed,
-        so models expecting x_mark inputs see correctly shaped tensors.
-        '''
+        # Time features shaped like the dataset's, [1, length, M].
         dates = pd.date_range("2020-01-01", periods=length, freq=self.args.d_freq)
 
         if self.args.d_embed != 'timeF':
@@ -71,7 +62,7 @@ class Exp_Params:
 
     def _build_inputs(self):
         args = self.args
-        batch_x = torch.randn(args.d_batch_size, args.d_seq_len, args.d_in_features, device=self.device)
+        batch_x = torch.randn(args.d_batch_size, args.d_seq_len, args.d_in_features, device=self.device)  # [B, L, C]
 
         input_type = args.d_model_input_type.lower()
 
@@ -82,7 +73,7 @@ class Exp_Params:
             batch_x_mark = self._dummy_mark(args.d_seq_len).repeat(args.d_batch_size, 1, 1)
             return (batch_x, batch_x_mark)
 
-        # Encoder-decoder style models (x_mark_dec_incld), mirroring Exp_Main._get_inputs.
+        # Encoder-decoder inputs.
         batch_x_mark = self._dummy_mark(args.d_seq_len).repeat(args.d_batch_size, 1, 1)
         dec_len = args.d_label_len + args.d_pred_len
         batch_y_mark = self._dummy_mark(dec_len).repeat(args.d_batch_size, 1, 1)
@@ -96,28 +87,14 @@ class Exp_Params:
 
     @torch.no_grad()
     def profile(self):
-        '''
-        Runs a single forward pass and returns size/compute/latency stats
-        for the model under the current configuration: total/trainable
-        parameter counts, the subset of parameters actually exercised by
-        this forward pass ("active" -- differs from total when a model owns
-        branches a given config never calls, e.g. an unused decomposition
-        head), MACs / FLOPs, the model's footprint in MB, and wall-clock
-        inference latency for one forward pass at the configured batch size.
-        '''
         self.model.eval()
         inputs = self._build_inputs()
 
-        # One untimed forward pass to warm up (CUDA kernel/cuDNN autotuning,
-        # lazy weight materialization, etc.) so the timed pass below isn't
-        # skewed by one-time setup cost.
+        # Warm-up pass.
         self.model(*inputs)
         self._sync()
 
-        # Forward hooks tell us which submodules actually ran for this
-        # config, so params owned by dead/unused branches can be excluded.
-        # This pass also doubles as the timed pass, so an expensive model
-        # (e.g. Chronos2's full pipeline) isn't run more times than needed.
+        # Timed pass; hooks record which modules ran.
         fired = set()
         handles = [
             m.register_forward_hook(lambda mod, inp, out, _m=m: fired.add(id(_m)))
@@ -132,10 +109,7 @@ class Exp_Params:
             for handle in handles:
                 handle.remove()
 
-        # A Parameter/buffer shared across submodules (e.g. Vesa's shared_pa/
-        # shared_pb, re-registered on every VesaLinear that holds a
-        # reference) must only be counted once -- dedupe by tensor identity
-        # rather than by owning module.
+        # Shared tensors are counted once.
         total_params = 0
         trainable_params = 0
         size_bytes = 0
@@ -155,9 +129,7 @@ class Exp_Params:
                         trainable_params += p.numel()
                 if id(m) in fired:
                     active_param_ids.add(pid)
-            # Buffers (e.g. fixed rotation matrices, running stats) hold no
-            # gradient and aren't parameters, but they're live tensors on
-            # device and belong in the model's memory footprint.
+            # Buffers count toward size only.
             for b in m.buffers(recurse=False):
                 bid = id(b)
                 if bid not in seen_buffer_ids:
@@ -166,6 +138,7 @@ class Exp_Params:
 
         active_params = sum(params_by_id[pid].numel() for pid in active_param_ids)
 
+        # fvcore counts MACs; FLOPs = 2 * MACs.
         flops_analysis = FlopCountAnalysis(self.model, inputs)
         flops_analysis.unsupported_ops_warnings(False)
         flops_analysis.uncalled_modules_warnings(False)

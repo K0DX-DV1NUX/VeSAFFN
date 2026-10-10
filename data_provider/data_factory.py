@@ -9,6 +9,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class TimeSeriesDataset(Dataset):
+    # Sliding windows over a CSV with a 70/10/20 train/val/test split.
+    # Returns x [L, C], y [label_len + H, C] and their time features.
 
     def __init__(
         self,
@@ -43,9 +45,7 @@ class TimeSeriesDataset(Dataset):
         self.__read_data__()
 
 
-
     def __read_data__(self):
-
         self.scaler = StandardScaler()
 
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
@@ -61,6 +61,7 @@ class TimeSeriesDataset(Dataset):
         cols.remove(target_col)
         cols.remove('date')
 
+        # Columns: date, features..., target.
         df_raw = df_raw[['date'] + cols + [target_col]]
 
         total_len = len(df_raw)
@@ -68,6 +69,7 @@ class TimeSeriesDataset(Dataset):
         num_train = int(total_len * self.train_ratio)
         num_val = int(total_len * self.val_ratio)
 
+        # Val and test start seq_len early so their first window has full history.
         border1s = [
             0,
             num_train - self.seq_len,
@@ -91,9 +93,7 @@ class TimeSeriesDataset(Dataset):
 
         scaler_path = os.path.join(self.checkpoints_path, "scaler.pkl")
 
-        # A fixed/pretrained model (e.g. Chronos-2) is tested without ever
-        # training locally, so no scaler was fit and saved beforehand --
-        # fall back to fitting one here instead of requiring a prior run.
+        # Scaler is fit on the train split and saved with the checkpoint.
         if self.is_training or not os.path.exists(scaler_path):
             train_data = df_data[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
@@ -142,7 +142,7 @@ class TimeSeriesDataset(Dataset):
         else:
             starts = np.arange(0, last_start + 1, self.stride)
 
-        # ensure final window reaches dataset end
+        # Last window always ends at the end of the split.
         if starts[-1] != last_start:
             starts = np.append(starts, last_start)       
 
@@ -155,7 +155,6 @@ class TimeSeriesDataset(Dataset):
         self.samples = np.stack([s_begin, s_end, r_begin, r_end], axis=1)
 
     def __getitem__(self, idx):
-
         s_begin, s_end, r_begin, r_end = self.samples[idx]
 
         seq_x = self.data_x[s_begin:s_end]

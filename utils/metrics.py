@@ -1,5 +1,7 @@
 import numpy as np
 
+# Forecast error metrics; pred and true are [T, C].
+
 EPS = 1e-8
 
 

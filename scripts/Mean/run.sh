@@ -1,4 +1,5 @@
 #!/bin/sh
+# Standalone training and testing on every dataset, seeds 2021-2023.
 
 model_config="scripts/Mean/toml/model.toml"
 data_config="scripts/defaults/"

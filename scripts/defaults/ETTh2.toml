@@ -1,6 +1,4 @@
-# -------------------------
-# Defaults (shared settings)
-# -------------------------
+# ETTh2: dataset and training defaults.
 
 [default]
 # Training
@@ -12,7 +10,6 @@ d_batch_size = 32
 d_train_stride = 5
 d_test_stride = 1
 d_lradj = "type7"
-
 
 # Data
 d_root_path = "../dataset"

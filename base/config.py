@@ -2,6 +2,7 @@ from typing import Literal, List
 from pydantic import BaseModel, Field, model_validator, field_validator
 
 
+# Run config merged from the toml files. d_* = data/training keys, m_* = model keys.
 class ExpConfig(BaseModel):
     model_config = {"extra": "allow"}
 
@@ -11,10 +12,8 @@ class ExpConfig(BaseModel):
         description="Execution mode: 1 = train + test, 0 = test only (no training)."
     )
 
-    # -------------------------
-    # Dataset Information.
-    # -------------------------
 
+    # Dataset
     d_data: str = Field(
         ...,
         description="Dataset identifier (used for logging and experiment naming)."
@@ -80,9 +79,7 @@ class ExpConfig(BaseModel):
         description="Whether to apply inverse scaling to predictions before evaluation."
     )
 
-    # -------------------------
     # Sequence lengths
-    # -------------------------
     d_seq_len: int = Field(
         96,
         gt=0,
@@ -101,9 +98,7 @@ class ExpConfig(BaseModel):
         description="Prediction horizon (number of future time steps to forecast)."
     )
 
-    # -------------------------
     # Feature dimensions
-    # -------------------------
     d_in_features: int = Field(
         ...,
         gt=0,
@@ -116,18 +111,14 @@ class ExpConfig(BaseModel):
         description="Number of output variables to predict."
     )
 
-    # -------------------------
-    # Output behavior
-    # -------------------------
+    # Output
     d_output_attention: bool = Field(
         False,
         description="Whether the model returns attention weights along with predictions."
     )
 
 
-    # -------------------------
-    # Model identity
-    # -------------------------
+    # Model
     d_model: str = Field(
         ...,
         description="Model name (e.g., DLinear, iTransformer, PatchTST)."
@@ -139,6 +130,7 @@ class ExpConfig(BaseModel):
     )
 
 
+    # Training
     d_num_workers: int = Field(
         10,
         ge=0,
@@ -169,10 +161,6 @@ class ExpConfig(BaseModel):
         description="Initial learning rate for the optimizer."
     )
 
-    # d_des: str = Field(
-    #     "test",
-    #     description="Experiment description or tag used for logging and checkpoint naming."
-    # )
 
     d_loss: Literal["mse", "mae"] = Field(
         "mse",
@@ -197,6 +185,7 @@ class ExpConfig(BaseModel):
     )
 
 
+    # Hardware
     d_use_gpu: bool = Field(
         False,
         description="Enable GPU acceleration if CUDA is available."
@@ -231,16 +220,12 @@ class ExpConfig(BaseModel):
     d_pretrained: bool = Field(
         False,
         description=(
-            "Model loads its own fixed, pretrained weights internally and is never "
-            "trained locally (e.g. a foundation-model baseline like Chronos-2). When "
-            "true, Exp_Main skips building train/val loaders and never tries to load "
-            "a local checkpoint, regardless of d_is_training."
+            "Model ships its own frozen weights (e.g. Chronos2): "
+            "no training and no local checkpoint."
         )
     )
 
-    # -------------------------
-    # Knowledge distillation (read from the student's toml; runKD.py only)
-    # -------------------------
+    # Knowledge distillation (student toml, runKD.py)
     d_kd_mode: Literal["none", "online", "offline"] = Field(
         "none",
         description=(
@@ -264,8 +249,7 @@ class ExpConfig(BaseModel):
         description="Online KD only: epochs the teacher trains alone before the student joins."
     )
 
-    # TimeDistill hyperparameters -- defaults follow the official code
-    # (github.com/LingFengGold/TimeDistill). Only read when d_kd_type = "timedistill".
+    # TimeDistill, used when d_kd_type = "timedistill"
     d_td_alpha: float = Field(
         1.0,
         ge=0.0,
@@ -290,9 +274,7 @@ class ExpConfig(BaseModel):
         description="TimeDistill: avg-pool kernel/stride between consecutive scales."
     )
 
-    # --------------------------------
-    # Allow CLI-style input: "0,1,2"
-    # --------------------------------
+    # Accepts "0,1,2" as well as [0, 1, 2].
     @field_validator("d_devices", mode="before")
     def parse_devices(cls, v):
         if isinstance(v, str):
@@ -302,19 +284,14 @@ class ExpConfig(BaseModel):
                 raise ValueError("d_devices must be a comma-separated list of integers.")
         return v
 
-    # --------------------------------
-    # Semantic validation
-    # --------------------------------
     @model_validator(mode="after")
     def validate_gpu_config(self):
-        # Multi-GPU requires at least 2 devices
         if self.d_use_multi_gpu:
             if len(self.d_devices) < 2:
                 raise ValueError(
                     "d_devices must contain at least 2 GPU IDs when d_use_multi_gpu is True."
                 )
 
-        # Ensure primary GPU is part of device list
         if self.d_gpu not in self.d_devices:
             raise ValueError(
                 "d_gpu must be one of the IDs in d_devices."
@@ -322,12 +299,8 @@ class ExpConfig(BaseModel):
 
         return self    
     
-    # -------------------------
-    # Cross-field validation
-    # -------------------------
     @model_validator(mode="after")
     def validate_lengths(self):
-        # label_len should not exceed seq_len
         if self.d_label_len > self.d_seq_len:
             raise ValueError("d_label_len must be <= d_seq_len.")
 
@@ -335,8 +308,6 @@ class ExpConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_kd(self):
-        # TimeDistill distills from a frozen teacher: offline only. This also
-        # rules it out for standalone (none) and online runs.
         if self.d_kd_type == "timedistill" and self.d_kd_mode != "offline":
             raise ValueError(
                 f"d_kd_type = 'timedistill' requires d_kd_mode = 'offline' (got '{self.d_kd_mode}'). "
@@ -352,12 +323,8 @@ class ExpConfig(BaseModel):
         return self
 
 
+# Student config for runKD.py; d_kd_mode must be online or offline.
 class KDConfig(ExpConfig):
-    '''
-    Student config for runKD.py: same as ExpConfig, but must actually pick a
-    distillation mode -- a KD run with d_kd_mode = "none" is a mistake.
-    '''
-
     @model_validator(mode="after")
     def validate_kd_mode_set(self):
         if self.d_kd_mode == "none":

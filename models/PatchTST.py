@@ -1,6 +1,8 @@
 __all__ = ['PatchTST']
 
-# Cell
+# PatchTST: channel-independent patch Transformer.
+# Source: https://github.com/yuqinie98/PatchTST
+
 from typing import Callable, Optional
 import torch
 from torch import nn
@@ -19,7 +21,6 @@ class Model(nn.Module):
         
         super().__init__()
         
-        # load parameters
         c_in = configs.d_in_features
         context_window = configs.d_seq_len
         target_window = configs.d_pred_len
@@ -46,7 +47,6 @@ class Model(nn.Module):
         kernel_size = configs.m_kernel_size
         
         
-        # model
         self.decomposition = decomposition
         if self.decomposition:
             self.decomp_module = series_decomp(kernel_size)
@@ -77,16 +77,17 @@ class Model(nn.Module):
                                   subtract_last=subtract_last, verbose=verbose, **kwargs)
     
     
-    def forward(self, x):           # x: [Batch, Input length, Channel]
+    def forward(self, x):
+        # x: [B, L, C]
         if self.decomposition:
-            res_init, trend_init = self.decomp_module(x)
-            res_init, trend_init = res_init.permute(0,2,1), trend_init.permute(0,2,1)  # x: [Batch, Channel, Input length]
-            res = self.model_res(res_init)
-            trend = self.model_trend(trend_init)
+            res_init, trend_init = self.decomp_module(x)                                # [B, L, C] each
+            res_init, trend_init = res_init.permute(0,2,1), trend_init.permute(0,2,1)  # [B, C, L] each
+            res = self.model_res(res_init)                                              # [B, C, H]
+            trend = self.model_trend(trend_init)                                        # [B, C, H]
             x = res + trend
-            x = x.permute(0,2,1)    # x: [Batch, Input length, Channel]
+            x = x.permute(0,2,1)                                                        # [B, H, C]
         else:
-            x = x.permute(0,2,1)    # x: [Batch, Channel, Input length]
-            x = self.model(x)
-            x = x.permute(0,2,1)    # x: [Batch, Input length, Channel]
+            x = x.permute(0,2,1)                                                        # [B, C, L]
+            x = self.model(x)                                                           # [B, C, H]
+            x = x.permute(0,2,1)                                                        # [B, H, C]
         return x

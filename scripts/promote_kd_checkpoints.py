@@ -3,8 +3,9 @@ import re
 import shutil
 from pathlib import Path
 
-# Matches the setting string runExp.py builds:
-# '{d_model}-{d_data}-ft{d_forecast_type}-sl{d_seq_len}-pl{d_pred_len}-seed{d_seed}'
+# Copies checkpoints/<setting>/checkpoint.pth to scripts/<Model>/pre_trained/<Dataset>/pl<PredLen>/.
+
+# Matches runExp.py run names.
 SETTING_RE = re.compile(
     r'^(?P<model>.+?)-(?P<data>.+?)-ft(?P<forecast>[A-Za-z]+)-sl(?P<seq>\d+)-pl(?P<pred>\d+)-seed(?P<seed>\d+)$'
 )

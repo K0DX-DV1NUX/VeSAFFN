@@ -1,4 +1,5 @@
 #!/bin/sh
+# Standalone training and testing on every dataset, seeds 2021-2023.
 
 model_config1="scripts/Vesa/toml/standalone/model1.toml"
 model_config2="scripts/Vesa/toml/standalone/model2.toml"

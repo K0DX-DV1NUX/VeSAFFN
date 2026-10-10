@@ -3,10 +3,7 @@ __pycache__/
 *.py[codz]
 *$py.class
 
-# Fixed/pretrained weights used as offline KD teachers (see exp/exp_kd.py,
-# Exp_KD_Offline): Chronos-2's own weights (downloaded on first use, see
-# models/Chronos2.py) plus any checkpoint.pth placed under a model's own
-# pre_trained/ folder to "fix" it into a static offline teacher.
+# Offline KD teacher weights.
 scripts/*/pre_trained/
 
 # C extensions

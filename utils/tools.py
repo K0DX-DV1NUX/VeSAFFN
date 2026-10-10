@@ -5,6 +5,7 @@ import joblib
 
 
 class EarlyStopping:
+    # Stops after `patience` epochs without improvement; saves the best checkpoint.
     def __init__(self, patience=7, verbose=False, delta=0):
         self.patience = patience
         self.verbose = verbose
@@ -38,9 +39,7 @@ class EarlyStopping:
 
     
 def check_and_prepare_dirs(args):
-    """
-    Check if required directories exist and create output directories if they don't.
-    """
+    # Creates plots/, checkpoints/ and results/ folders for this run.
     output_dirs = {
         "plots_dir": os.path.join("./plots/", args.d_setting),
         "checkpoints_dir": os.path.join(args.d_checkpoint_path, args.d_setting),
@@ -54,9 +53,11 @@ def check_and_prepare_dirs(args):
 
 
 def save_results(args, preds, trues):
+    # Saves preds.npy and trues.npy under results/<setting>/.
     np.save(os.path.join("./results/", args.d_setting, "preds.npy"), preds)
     np.save(os.path.join("./results/", args.d_setting, "trues.npy"), trues)
 
 def inverse_transform(args, data):
+        # Undo standard scaling with the run's saved scaler.
         scaler = joblib.load(os.path.join(args.d_checkpoint_path, args.d_setting, "scaler.pkl"))
         return scaler.inverse_transform(data)

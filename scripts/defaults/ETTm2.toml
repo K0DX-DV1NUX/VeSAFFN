@@ -1,6 +1,5 @@
-# -------------------------
-# Defaults (shared settings)
-# -------------------------
+# ETTm2: dataset and training defaults.
+
 [default]
 # Training
 d_is_training = 1
