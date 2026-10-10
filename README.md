@@ -27,6 +27,41 @@ X ─ RevIN ─ Haar DWT ─► [X_A ; X_D]  (2C × L/2)
    - `λ_a ∈ R^r` and `λ_b ∈ R^{d_l}` are **layer-specific** scaling vectors.
 4. **Inverse Haar DWT** recombines the two halves into the full horizon, and RevIN restores the original scale.
 
+```mermaid
+flowchart TD
+    X["Input X<br/>[B, L, C]"] --> N["RevIN norm<br/>[B, L, C]"]
+    N --> P["Permute<br/>[B, C, L]"]
+    P --> S["Split even / odd steps<br/>[B, C, L/2] each"]
+    S --> A["Approximation<br/>(even + odd) / √2"]
+    S --> D["Detail<br/>(even − odd) / √2"]
+    A --> CAT["Concat on channels<br/>[B, 2C, L/2]"]
+    D --> CAT
+
+    subgraph FFN["VeSA-FFN"]
+        L1["VeSA layer 1<br/>L/2 → D<br/>[B, 2C, D]"] --> G["GELU"]
+        G --> L2["VeSA layer 2<br/>D → H/2<br/>[B, 2C, H/2]"]
+    end
+
+    subgraph SH["Shared weights"]
+        PA["P_A (m × r)"]
+        PB["P_B (r × n)"]
+    end
+    PA -. "slice + λ_a, λ_b (layer 1)" .-> L1
+    PB -. "slice + λ_a, λ_b (layer 1)" .-> L1
+    PA -. "slice + λ_a, λ_b (layer 2)" .-> L2
+    PB -. "slice + λ_a, λ_b (layer 2)" .-> L2
+
+    CAT --> L1
+    L2 --> SP["Split on channels<br/>Ŷ_A, Ŷ_D: [B, C, H/2] each"]
+    SP --> I["Inverse Haar<br/>even = (Ŷ_A + Ŷ_D) / √2<br/>odd = (Ŷ_A − Ŷ_D) / √2"]
+    I --> M["Interleave even / odd<br/>[B, C, H]"]
+    M --> P2["Permute<br/>[B, H, C]"]
+    P2 --> DN["RevIN denorm"]
+    DN --> Y["Forecast Ŷ<br/>[B, H, C]"]
+```
+
+Inside each VeSA layer, the input `[B, 2C, in]` is multiplied by `P_A[:in, :r]` scaled by `λ_a` to give `[B, 2C, r]`, then by `P_B[:r, :out]` scaled by `λ_b` to give `[B, 2C, out]`, and the bias is added.
+
 The wavelet transforms add no trainable parameters, so all learnable weights sit in the VeSA-FFN. The idea comes from VeRA, but the shared matrices are trained, not frozen.
 
 **Variants**
@@ -67,6 +102,42 @@ data_provider/       Sliding-window dataset (70/10/20 split)
 utils/               Metrics, LR schedules, early stopping, plotting
 scripts/defaults/    Dataset, GPU and profiling configs
 scripts/<Model>/     Run scripts and model configs for each model
+```
+
+### Repository flow
+
+```mermaid
+flowchart TD
+    subgraph CFG["Configs (scripts/)"]
+        DT["defaults/#lt;DATA#gt;.toml"]
+        GT["defaults/gpu.toml"]
+        MT["#lt;Model#gt;/toml/*.toml"]
+        PT["defaults/params336.toml"]
+    end
+
+    SH["scripts/#lt;Model#gt;/*.sh"] --> RE["runExp.py"]
+    SH --> RK["runKD.py"]
+    SH2["scripts/runParams.sh"] --> RP["runParams.py"]
+
+    DT & GT & MT --> RE
+    DT & GT & MT --> RK
+    GT & MT & PT --> RP
+
+    RE -->|"merged + validated<br/>base/config.py"| EM["exp/exp_main.py<br/>Exp_Main"]
+    RK -->|"d_kd_mode = online"| EK["exp/exp_kd.py<br/>Exp_KD"]
+    RK -->|"offline, basic"| EO["exp/exp_kd.py<br/>Exp_KD_Offline"]
+    RK -->|"offline, timedistill"| ET["exp/exp_timedistill.py<br/>Exp_TimeDistill_Offline"]
+    RP --> EP["exp/exp_params.py<br/>Exp_Params"]
+
+    DS["data_provider/data_factory.py<br/>TimeSeriesDataset"] --> EM & EK & EO & ET
+    MD["models/*.py<br/>+ layers/*.py"] --> EM & EK & EO & ET & EP
+
+    EM --> OUT1["checkpoints/ · results/ · plots/<br/>Result_#lt;Model#gt;.csv"]
+    EK & EO & ET --> OUT2["checkpoints/ · results/ · plots/<br/>Result_#lt;Teacher#gt;_#lt;Student#gt;.csv"]
+    EP --> OUT3["Params.csv"]
+
+    OUT1 -. "run_for_kd.sh +<br/>promote_kd_checkpoints.py" .-> PRE["scripts/#lt;Model#gt;/pre_trained/"]
+    PRE -. "frozen teacher" .-> EO & ET
 ```
 
 ## Setup
@@ -189,10 +260,28 @@ This writes total, trainable and active parameters, MACs/FLOPs, size (MB) and la
 
 ### Sanity checks
 
+These scripts check that a model builds, runs and trains correctly before you start long experiments. They use random data only, so no dataset or GPU is needed.
+
 ```bash
 python scripts/FITS/check_fits.py
 python scripts/FreqMoE/check_freqmoe.py
 ```
+
+`check_fits.py` builds FITS from each standalone config (`hourly`, `ett_15min`, `tenmin`, `fivemin`), with `m_individual` set to 0 and to 1, for horizons 96 and 720. For each setting it checks that:
+
+- the forward pass on a random `[4, 336, 7]` batch returns one tensor of shape `[4, L + H, C]` with no NaN or Inf values;
+- a backward pass gives a gradient to every parameter.
+
+It prints the cut-off frequency and parameter count for each setting.
+
+`check_freqmoe.py` builds FreqMoE from its model config for horizons 96 and 720. It checks that:
+
+- the output is one tensor of shape `[4, H, C]` with no NaN or Inf values, in both train and eval mode;
+- after a backward pass, `moe.band_boundaries` is the only parameter without a gradient.
+
+It prints the parameter count, both as complex parameters and as real values (each complex parameter counts as 2).
+
+Both scripts print `OK` when every check passes.
 
 ## Outputs
 
