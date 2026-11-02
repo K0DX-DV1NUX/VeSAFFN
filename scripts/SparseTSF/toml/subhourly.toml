@@ -1,0 +1,31 @@
+# Sub-hourly data: the daily cycle is too long (96-288), so w = 4 as upstream does for ETTm, Weather and Solar.
+[default]
+# Model
+d_model = "SparseTSF"
+d_model_input_type = "x_only"
+
+# Architecture
+m_model_type = "linear"
+m_period_len = 4
+m_d_model = 128  # MLP hidden size; unused when m_model_type = "linear".
+
+# One run per prediction horizon; d_test_stride = d_pred_len gives non-overlapping test windows.
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
