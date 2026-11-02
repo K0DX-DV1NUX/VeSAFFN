@@ -1,0 +1,275 @@
+# Vesa_ablate: one-level wavelet decomposition, three wavelets per family.
+
+[default]
+# Model
+d_model = "Vesa_ablate"
+d_model_input_type = "x_only"
+
+# Decomposition: "wavelet", "trend_residual" or "none"
+m_decomp = "wavelet"
+
+# RevIN
+m_use_norm = true
+
+# false: shared scales, true: per-channel scales
+m_individual = true
+
+# FFN hidden dim D and rank r
+m_seq_dim = 256
+m_vesa_rank = 64
+
+# One run per wavelet and horizon; d_run_tag keeps each wavelet in its own results folder.
+# Daubechies
+[[runs]]
+d_run_tag = "db1"
+m_wavelet = "db1"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "db1"
+m_wavelet = "db1"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "db1"
+m_wavelet = "db1"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "db1"
+m_wavelet = "db1"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+[[runs]]
+d_run_tag = "db3"
+m_wavelet = "db3"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "db3"
+m_wavelet = "db3"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "db3"
+m_wavelet = "db3"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "db3"
+m_wavelet = "db3"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+[[runs]]
+d_run_tag = "db6"
+m_wavelet = "db6"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "db6"
+m_wavelet = "db6"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "db6"
+m_wavelet = "db6"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "db6"
+m_wavelet = "db6"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+# Coiflets
+[[runs]]
+d_run_tag = "coif1"
+m_wavelet = "coif1"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "coif1"
+m_wavelet = "coif1"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "coif1"
+m_wavelet = "coif1"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "coif1"
+m_wavelet = "coif1"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+[[runs]]
+d_run_tag = "coif2"
+m_wavelet = "coif2"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "coif2"
+m_wavelet = "coif2"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "coif2"
+m_wavelet = "coif2"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "coif2"
+m_wavelet = "coif2"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+[[runs]]
+d_run_tag = "coif3"
+m_wavelet = "coif3"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "coif3"
+m_wavelet = "coif3"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "coif3"
+m_wavelet = "coif3"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "coif3"
+m_wavelet = "coif3"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+# Symlets
+[[runs]]
+d_run_tag = "sym4"
+m_wavelet = "sym4"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "sym4"
+m_wavelet = "sym4"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "sym4"
+m_wavelet = "sym4"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "sym4"
+m_wavelet = "sym4"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+[[runs]]
+d_run_tag = "sym6"
+m_wavelet = "sym6"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "sym6"
+m_wavelet = "sym6"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "sym6"
+m_wavelet = "sym6"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "sym6"
+m_wavelet = "sym6"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+[[runs]]
+d_run_tag = "sym8"
+m_wavelet = "sym8"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "sym8"
+m_wavelet = "sym8"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "sym8"
+m_wavelet = "sym8"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "sym8"
+m_wavelet = "sym8"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720

@@ -124,6 +124,11 @@ class ExpConfig(BaseModel):
         description="Model name (e.g., DLinear, iTransformer, PatchTST)."
     )
 
+    d_run_tag: str = Field(
+        "",
+        description="Optional suffix on the model name in the run setting, keeps variants of one model apart."
+    )
+
     d_model_input_type: str = Field(
         ...,
         description="Input format expected by the model (e.g., x_only, x_mark_dec_incld)."

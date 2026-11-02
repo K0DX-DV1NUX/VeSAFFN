@@ -88,8 +88,8 @@ def main():
             setting = '{}-{}-{}-{}-{}-ft{}-sl{}-pl{}-seed{}'.format(
                 "KD" if student_cfgs.d_kd_type == "basic" else "TimeDistill",
                 student_cfgs.d_kd_mode,
-                teacher_cfgs.d_model,
-                student_cfgs.d_model,
+                f"{teacher_cfgs.d_model}_{teacher_cfgs.d_run_tag}" if teacher_cfgs.d_run_tag else teacher_cfgs.d_model,
+                f"{student_cfgs.d_model}_{student_cfgs.d_run_tag}" if student_cfgs.d_run_tag else student_cfgs.d_model,
                 student_cfgs.d_data,
                 student_cfgs.d_forecast_type,
                 student_cfgs.d_seq_len,

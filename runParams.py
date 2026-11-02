@@ -16,6 +16,7 @@ MODEL_CONFIGS = {
     "iTransformer": "scripts/iTransformer/toml/model.toml",
     "FITS": "scripts/FITS/toml/standalone/hourly.toml",
     "FreqMoE": "scripts/FreqMoE/toml/model.toml",
+    "SparseTSF": "scripts/SparseTSF/toml/model.toml",
     "PatchTST": "scripts/PatchTST/toml/model1.toml",
     "Vesa": "scripts/Vesa/toml/standalone/model1.toml",
     "Chronos2": "scripts/Chronos2/toml/model.toml",

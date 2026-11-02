@@ -61,7 +61,7 @@ def main():
 
             # Run name, used for checkpoints and results.
             setting = '{}-{}-ft{}-sl{}-pl{}-seed{}'.format(
-                cfgs.d_model,
+                f"{cfgs.d_model}_{cfgs.d_run_tag}" if cfgs.d_run_tag else cfgs.d_model,
                 cfgs.d_data,
                 cfgs.d_forecast_type,
                 cfgs.d_seq_len,
