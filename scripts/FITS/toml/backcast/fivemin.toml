@@ -1,0 +1,35 @@
+[default]
+# Model
+d_model = "FITS"
+d_model_input_type = "x_only"
+d_kd_teacher_warmup_epochs = 10
+
+# Paper loss: backcast + forecast over L+H. Set d_auxillary_loss = false for forecast-only.
+d_auxillary_loss = true
+d_run_tag = "backcast"
+
+# Cut-off frequency = (seq_len // m_base_T + 1) * m_h_order + 10
+m_individual = 0
+m_h_order = 2
+m_base_T = 288
+
+# One run per prediction horizon; d_test_stride = d_pred_len gives non-overlapping test windows.
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720

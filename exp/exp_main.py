@@ -250,6 +250,7 @@ class Exp_Main:
                     outputs = outputs[0]
 
                 f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
+                full_outputs = outputs[:, :, f_dim:]
                 outputs = outputs[:, -self.args.d_pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.d_pred_len:, f_dim:].to(self.device)
 
@@ -258,7 +259,8 @@ class Exp_Main:
                         raise AttributeError(
                             f"d_auxillary_loss is enabled but model '{self.args.d_model}' has no aux_loss method."
                         )
-                    loss = self.model.aux_loss(outputs, batch_y)
+                    # Forecast slices, plus the raw output and look-back for models that need them.
+                    loss = self.model.aux_loss(outputs, batch_y, full_outputs=full_outputs, batch_x=batch_x[:, :, f_dim:])
                 else:
                     loss = criterion(outputs, batch_y)
 

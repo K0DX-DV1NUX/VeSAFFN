@@ -3,6 +3,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Model(nn.Module):
@@ -56,3 +57,8 @@ class Model(nn.Module):
 
         xy = low_xy * torch.sqrt(x_var) + x_mean                   # [B, L+H, C]
         return xy
+
+    def aux_loss(self, outputs, batch_y, full_outputs, batch_x, **_):
+        # Backcast + forecast (B+F, paper section 3.2): MSE over the whole L+H output.
+        # full_outputs: [B, L+H, C], batch_x: [B, L, C], batch_y: [B, H, C]
+        return F.mse_loss(full_outputs, torch.cat([batch_x, batch_y], dim=1))

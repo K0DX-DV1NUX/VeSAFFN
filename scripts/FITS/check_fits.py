@@ -36,6 +36,11 @@ if __name__ == "__main__":
                 assert y[:, -pred_len:].shape == (4, pred_len, cfg.d_in_features)
                 assert torch.isfinite(y).all()
 
+                # Backcast + forecast loss covers the whole L+H output.
+                batch_y = torch.randn(4, pred_len, cfg.d_in_features)
+                aux = model.aux_loss(y[:, -pred_len:], batch_y, full_outputs=y, batch_x=x)
+                assert aux.isclose(((y - torch.cat([x, batch_y], dim=1)) ** 2).mean())
+
                 y.pow(2).mean().backward()
                 assert all(p.grad is not None for p in model.parameters()), "unconnected parameter"
 

@@ -174,7 +174,11 @@ class ExpConfig(BaseModel):
 
     d_auxillary_loss: bool = Field(
         False,
-        description="Whether to include auxiliary loss from model (if available) during training."
+        description=(
+            "Train on the model's own aux_loss instead of d_loss; validation and test are unchanged. "
+            "Models define aux_loss(outputs, batch_y, **context): outputs and batch_y are the forecast slices, "
+            "context holds full_outputs (raw model output) and batch_x, for models that need them."
+        )
     )
 
     d_lradj: str = Field(

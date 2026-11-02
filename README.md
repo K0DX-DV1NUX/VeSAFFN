@@ -267,6 +267,8 @@ python scripts/FITS/check_fits.py
 python scripts/FreqMoE/check_freqmoe.py
 ```
 
+FITS trains on the forecast only by default. Set `d_auxillary_loss = true` to use the paper's backcast + forecast loss over the whole `L + H` output, as in `scripts/FITS/toml/backcast/` and `scripts/FITS/run_backcast.sh`. Those configs set `d_run_tag = "backcast"`, so their results save under `FITS_backcast-...` and don't overwrite the default runs.
+
 `check_fits.py` builds FITS from each standalone config (`hourly`, `ett_15min`, `tenmin`, `fivemin`), with `m_individual` set to 0 and to 1, for horizons 96 and 720. For each setting it checks that:
 
 - the forward pass on a random `[4, 336, 7]` batch returns one tensor of shape `[4, L + H, C]` with no NaN or Inf values;
