@@ -96,7 +96,7 @@ runKD.py             Knowledge distillation (online / offline / TimeDistill)
 runParams.py         Params, FLOPs, size and latency profiling
 base/config.py       Config schema (pydantic) for every toml key
 exp/                 Experiment loops: exp_main, exp_kd, exp_timedistill, exp_params
-models/              Vesa (VeSA-FFN), FITS, DLinear, PatchTST, iTransformer, FrNet, FreqMoE, Chronos2, baselines
+models/              Vesa (VeSA-FFN), FITS, DLinear, PatchTST, iTransformer, FrNet, FreqMoE, SparseTSF, Chronos2, baselines
 layers/              Shared layers (RevIN, attention, embeddings, PatchTST backbone)
 data_provider/       Sliding-window dataset (70/10/20 split)
 utils/               Metrics, LR schedules, early stopping, plotting
