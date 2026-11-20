@@ -1,0 +1,46 @@
+# Traffic: upstream traffic.sh (hour + weekday embeddings).
+[default]
+# Model
+d_model = "TimeEmb"
+d_model_input_type = "x_index"  # (x, time_index): integer row position / hour / weekday, see data_provider
+
+# Training loss: m_rec_lambda * MSE + m_auxi_lambda * MAE of the FFT difference (per run); val/test use d_loss.
+d_auxillary_loss = true
+
+# Static time embeddings (frequency domain) + learnable frequency filter + MLP.
+m_d_model = 512
+m_use_revin = true
+m_use_hour_index = true
+m_hour_length = 24
+m_use_day_index = true
+m_day_length = 7
+# Upstream trains with lr 0.002 (d_learning_rate); here the dataset toml's training settings apply, as for every model.
+
+# One run per prediction horizon; d_test_stride = d_pred_len gives non-overlapping test windows.
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+m_rec_lambda = 0.0
+m_auxi_lambda = 1.0
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+m_rec_lambda = 0.0
+m_auxi_lambda = 1.0
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+m_rec_lambda = 0.0
+m_auxi_lambda = 1.0
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+m_rec_lambda = 0.0
+m_auxi_lambda = 1.0

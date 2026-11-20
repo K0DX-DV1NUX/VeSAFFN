@@ -1,0 +1,33 @@
+# Hourly electricity / traffic data, weekly cycle (upstream Electricity/Traffic: cycle 168).
+[default]
+# Model
+d_model = "CycleNet"
+d_model_input_type = "x_index"  # (x, time_index): integer row position / hour / weekday, see data_provider
+
+# Residual Cycle Forecasting: learnable cycle of m_cycle rows, removed before and added after the backbone.
+m_cycle = 168
+m_model_type = "linear"  # linear | mlp
+m_d_model = 512          # MLP hidden size; unused when m_model_type = "linear"
+m_use_revin = true
+# Upstream trains with lr 0.005 (d_learning_rate); here the dataset toml's training settings apply, as for every model.
+
+# One run per prediction horizon; d_test_stride = d_pred_len gives non-overlapping test windows.
+[[runs]]
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
