@@ -258,6 +258,12 @@ class ExpConfig(BaseModel):
         description="Online KD only: epochs the teacher trains alone before the student joins."
     )
 
+    d_kd_alpha: float = Field(
+        1.0,
+        ge=0,
+        description="Basic KD: weight alpha on the student-teacher KD term in the total loss."
+    )
+
     # TimeDistill, used when d_kd_type = "timedistill"
     d_td_alpha: float = Field(
         1.0,
