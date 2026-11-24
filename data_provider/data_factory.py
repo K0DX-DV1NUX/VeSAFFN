@@ -8,9 +8,16 @@ import joblib
 import warnings
 warnings.filterwarnings('ignore')
 
+# d_model_input_type = "x_index": the time marks are these integer columns instead of time features.
+# position = row index in the full CSV (CycleNet's cycle index is position % cycle), hour = hour of day,
+# weekday = Monday 0 .. Sunday 6 (TimeEmb's hour / day indices).
+TIME_INDEX_COLS = ("position", "hour", "weekday")
+
+
 class TimeSeriesDataset(Dataset):
     # Sliding windows over a CSV with a 70/10/20 train/val/test split.
-    # Returns x [L, C], y [label_len + H, C] and their time features.
+    # Returns x [L, C], y [label_len + H, C] and their time features
+    # (or, for d_model_input_type = "x_index", their integer TIME_INDEX_COLS [L, 3] / [label_len + H, 3]).
 
     def __init__(
         self,
@@ -32,6 +39,7 @@ class TimeSeriesDataset(Dataset):
         self.target = args.d_target
         self.timeenc = timeenc
         self.freq = args.d_freq
+        self.time_index = args.d_model_input_type.lower() == "x_index"
 
         self.root_path = args.d_root_path
         self.data_path = args.d_data_path
@@ -108,7 +116,15 @@ class TimeSeriesDataset(Dataset):
         df_stamp = df_raw[['date']][border1:border2].copy()
         df_stamp['date'] = pd.to_datetime(df_stamp['date'])
 
-        if self.timeenc == 0:
+        if self.time_index:
+            # Integer time indices, [N_split, 3]; position counts rows from the start of the full CSV.
+            data_stamp = np.stack([
+                np.arange(border1, border2),
+                df_stamp.date.dt.hour.values,
+                df_stamp.date.dt.weekday.values,
+            ], axis=1).astype(np.int64)
+
+        elif self.timeenc == 0:
 
             df_stamp['month'] = df_stamp.date.dt.month
             df_stamp['day'] = df_stamp.date.dt.day
