@@ -9,17 +9,25 @@ import torch
 from base.config import ExpConfig
 from exp.exp_params import Exp_Params
 
-# Model -> model toml used for profiling.
+# Model -> model toml(s) used for profiling; one entry per run tag / ablation.
 MODEL_CONFIGS = {
-    "DLinear": "scripts/DLinear/toml/model.toml",
-    "FrNet": "scripts/FrNet/toml/ETTh1.toml",
-    "iTransformer": "scripts/iTransformer/toml/model.toml",
-    "FITS": "scripts/FITS/toml/standalone/hourly.toml",
-    "FreqMoE": "scripts/FreqMoE/toml/model.toml",
-    "SparseTSF": "scripts/SparseTSF/toml/model.toml",
-    "PatchTST": "scripts/PatchTST/toml/model1.toml",
-    "Vesa": "scripts/Vesa/toml/standalone/model1.toml",
-    "Chronos2": "scripts/Chronos2/toml/model.toml",
+    # "DLinear": ["scripts/DLinear/toml/model.toml"],
+    # "FrNet": ["scripts/FrNet/toml/ETTh1.toml"],
+    # "iTransformer": ["scripts/iTransformer/toml/model.toml"],
+    # "FITS": ["scripts/FITS/toml/standalone/hourly.toml"],
+    # "FreqMoE": ["scripts/FreqMoE/toml/model.toml"],
+    # "SparseTSF": ["scripts/SparseTSF/toml/model.toml"],
+    # "CycleNet": ["scripts/CycleNet/toml/hourly.toml"],
+    # "TimeEmb": ["scripts/TimeEmb/toml/ETTh1.toml"],
+    # "PatchTST": ["scripts/PatchTST/toml/model1.toml"],
+    "Vesa": ["scripts/Vesa/toml/standalone/model2.toml"],
+    # "Vesa_ablate": [
+    #     "scripts/Vesa_ablate/toml/wavelet.toml",
+    #     "scripts/Vesa_ablate/toml/trend_residual.toml",
+    #     "scripts/Vesa_ablate/toml/no_decomp.toml",
+    #     "scripts/Vesa_ablate/toml/standalone_rank.toml",
+    # ],
+    # "Chronos2": ["scripts/Chronos2/toml/model.toml"],
 }
 
 PARAMS_SEED = 2021
@@ -30,10 +38,16 @@ def load_toml(path):
         return tomllib.load(f)
 
 
-def model_run_overrides(model_values, pred_len):
-    # The model's own per-horizon m_* settings.
+def model_run_tags(model_values):
+    # Run tags in the toml: per-run d_run_tag (one profile per tag), else [default]'s.
+    tags = list(dict.fromkeys(r["d_run_tag"] for r in model_values.get("runs", []) if "d_run_tag" in r))
+    return tags or [model_values["default"].get("d_run_tag") or "default"]
+
+
+def model_run_overrides(model_values, pred_len, tag):
+    # The model's own per-horizon m_* settings for this run tag.
     for run in model_values.get("runs", []):
-        if run.get("d_pred_len") == pred_len:
+        if run.get("d_pred_len") == pred_len and run.get("d_run_tag", tag) == tag:
             return {k: v for k, v in run.items() if k.startswith("m_")}
     return {}
 
@@ -43,7 +57,7 @@ def main():
     parser.add_argument("--gpu_config", type=str, required=True, help="Path to experiment TOML config for gpu settings.")
     parser.add_argument("--params_config", type=str, required=True, help="Path to experiment TOML config for the channel/seq_len/pred_len grid.")
     parser.add_argument("--output", type=str, default="Params.csv", help="Path to the output CSV file.")
-    parser.add_argument("--models", type=str, nargs="+", default=None, help="Only profile these MODEL_CONFIGS labels (default: all).")
+    parser.add_argument("--models", type=str, nargs="+", default=None, help="Only profile these MODEL_CONFIGS models (default: all).")
     args = parser.parse_args()
 
     gpu_values = load_toml(args.gpu_config)
@@ -55,13 +69,18 @@ def main():
 
     rows = []
 
-    for label, model_config_path in MODEL_CONFIGS.items():
-        if args.models and label not in args.models:
-            continue
-        model_values = load_toml(model_config_path)
+    jobs = [(name, path) for name, paths in MODEL_CONFIGS.items()
+            if not args.models or name in args.models for path in paths]
 
-        for run in params_values["runs"]:
-            overrides = model_run_overrides(model_values, run["d_pred_len"])
+    for name, model_config_path in jobs:
+        try:
+            model_values = load_toml(model_config_path)
+        except OSError as e:
+            print('!!!!!!!failed: {}: {}'.format(name, e))
+            continue
+        for tag, run in [(t, r) for t in model_run_tags(model_values) for r in params_values["runs"]]:
+            label = '{}/{}'.format(name, tag)
+            overrides = model_run_overrides(model_values, run["d_pred_len"], tag)
 
             # Priority: params default < gpu < model default < model run < params run.
             merged = {
@@ -70,6 +89,7 @@ def main():
                 **model_values['default'],
                 **overrides,
                 **run,
+                "d_run_tag": tag,
             }
             cfgs = ExpConfig(**merged)
 
@@ -90,19 +110,18 @@ def main():
                 continue
 
             rows.append({
-                "label": label,
+                # "label": label,
                 "model": cfgs.d_model,
+                "run_tag": cfgs.d_run_tag,
                 "channels": cfgs.d_in_features,
-                "seq_len": cfgs.d_seq_len,
+                # "seq_len": cfgs.d_seq_len,
                 "pred_len": cfgs.d_pred_len,
-                "batch_size": cfgs.d_batch_size,
+                # "batch_size": cfgs.d_batch_size,
                 "total_params": stats["total_params"],
                 "trainable_params": stats["trainable_params"],
                 "active_params": stats["active_params"],
                 "macs": stats["macs"],
-                "gmacs": stats["macs"] / 1e9,
                 "flops": stats["flops"],
-                "gflops": stats["flops"] / 1e9,
                 "size_mb": stats["size_mb"],
                 "latency_ms": stats["latency_ms"],
             })
