@@ -40,8 +40,8 @@ def main():
     for run in student_values["runs"]:
         for d_seed in range(2021, 2024):
 
-            # Teacher shares the student's d_* keys, keeps its own m_* keys.
-            shared_window = {k: v for k, v in run.items() if k.startswith("d_")}
+            # Teacher shares the student's d_* keys, keeps its own m_* keys and d_run_tag.
+            shared_window = {k: v for k, v in run.items() if k.startswith("d_") and k != "d_run_tag"}
 
             teacher_merged = {
                 **data_values['default'],
