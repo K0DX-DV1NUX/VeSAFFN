@@ -13,7 +13,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
 from data_provider.data_factory import TimeSeriesDataset
-from models import Chronos2, DLinear, FITS, FreqMoE, MeanMedian, Naive, PatchTST, SparseTSF, iTransformer, FrNet, Vesa, Vesa_ablate
+from models import Chronos2, DLinear, DLinear_ablate, FITS, FreqMoE, MeanMedian, Naive, PatchTST, SparseTSF, CycleNet, TimeEmb, iTransformer, FrNet, Vesa, Vesa_ablate
 from utils.learning_rates import adjust_learning_rate
 from utils.tools import EarlyStopping
 from utils.metrics import metric
@@ -56,6 +56,7 @@ class Exp_Main:
         model_dict = {
             'Chronos2': Chronos2,
             'DLinear': DLinear,
+            'DLinear_ablate': DLinear_ablate,
             'MeanMedian': MeanMedian,
             'Naive': Naive,
             'PatchTST': PatchTST,
@@ -64,6 +65,8 @@ class Exp_Main:
             'FITS': FITS,
             'FreqMoE': FreqMoE,
             'SparseTSF': SparseTSF,
+            'CycleNet': CycleNet,
+            'TimeEmb': TimeEmb,
             'Vesa': Vesa,
             'Vesa_ablate': Vesa_ablate,
         }
@@ -136,8 +139,12 @@ class Exp_Main:
         batch_x = x.float().to(self.device)
         batch_y = y.float().to(self.device)
         
+        # Integer time indices (CycleNet, TimeEmb) stay integers and are kept for every dataset.
+        if self.args.d_model_input_type.lower() == "x_index":
+            batch_x_mark = x_mark.long().to(self.device)
+            batch_y_mark = y_mark.long().to(self.device)
         # No time features for PEMS and Solar.
-        if 'PEMS' in self.args.d_data or 'Solar' in self.args.d_data:
+        elif 'PEMS' in self.args.d_data or 'Solar' in self.args.d_data:
             batch_x_mark = None
             batch_y_mark = None
         else:
@@ -170,13 +177,16 @@ class Exp_Main:
                     model_args = (batch_x,)
                 elif input_type == "x_mark_incl":
                     model_args = (batch_x, batch_x_mark)
+                elif input_type == "x_index":
+                    # Time indices at the first forecast step: [B, 3] (position, hour, weekday).
+                    model_args = (batch_x, batch_y_mark[:, self.args.d_label_len])
                 else:
                     model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     
                 with amp_context:
                     outputs = self.model(*model_args)
                 
-                if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
+                if input_type not in ["x_only", "x_mark_incl", "x_index"] and self.args.d_output_attention:
                     outputs = outputs[0]
 
                 f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
@@ -240,13 +250,16 @@ class Exp_Main:
                     model_args = (batch_x,)
                 elif input_type == "x_mark_incl":
                     model_args = (batch_x, batch_x_mark)
+                elif input_type == "x_index":
+                    # Time indices at the first forecast step: [B, 3] (position, hour, weekday).
+                    model_args = (batch_x, batch_y_mark[:, self.args.d_label_len])
                 else:
                     model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     
                 with amp_context:
                     outputs = self.model(*model_args)
                 
-                if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
+                if input_type not in ["x_only", "x_mark_incl", "x_index"] and self.args.d_output_attention:
                     outputs = outputs[0]
 
                 f_dim = -1 if self.args.d_forecast_type == 'MS' else 0
@@ -333,12 +346,15 @@ class Exp_Main:
                     model_args = (batch_x,)
                 elif input_type == "x_mark_incl":
                     model_args = (batch_x, batch_x_mark)
+                elif input_type == "x_index":
+                    # Time indices at the first forecast step: [B, 3] (position, hour, weekday).
+                    model_args = (batch_x, batch_y_mark[:, self.args.d_label_len])
                 else:
                     model_args = (batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 
                 outputs = self.model(*model_args)
 
-                if input_type not in ["x_only", "x_mark_incl"] and self.args.d_output_attention:
+                if input_type not in ["x_only", "x_mark_incl", "x_index"] and self.args.d_output_attention:
                     outputs = outputs[0]
 
 

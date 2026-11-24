@@ -1,0 +1,337 @@
+# Vesa_ablate: DLinear trend-residual decomposition.
+
+[default]
+# Model
+d_model = "Vesa_ablate"
+d_model_input_type = "x_only"
+
+# RevIN
+m_use_norm = true
+
+# false: shared scales, true: per-channel scales
+m_individual = true
+
+#### Trend-Residual Decomposition
+[[runs]]
+d_run_tag = "trend_residual"
+m_decomp = "trend_residual"
+m_moving_avg = 25
+m_seq_dim = 336
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "trend_residual"
+m_decomp = "trend_residual"
+m_moving_avg = 25
+m_seq_dim = 336
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "trend_residual"
+m_decomp = "trend_residual"
+m_moving_avg = 25
+m_seq_dim = 336
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "trend_residual"
+m_decomp = "trend_residual"
+m_moving_avg = 25
+m_seq_dim = 336
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+
+#### No Decomposition
+[[runs]]
+d_run_tag = "no_decomp"
+m_decomp = "none"
+m_seq_dim = 336
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "no_decomp"
+m_decomp = "none"
+m_seq_dim = 336
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "no_decomp"
+m_decomp = "none"
+m_seq_dim = 336
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "no_decomp"
+m_decomp = "none"
+m_seq_dim = 336
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+
+#### Wavelet Decomposition
+[[runs]]
+d_run_tag = "db1"
+m_wavelet = "db1"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "db1"
+m_wavelet = "db1"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "db1"
+m_wavelet = "db1"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "db1"
+m_wavelet = "db1"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+[[runs]]
+d_run_tag = "db3"
+m_wavelet = "db3"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "db3"
+m_wavelet = "db3"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "db3"
+m_wavelet = "db3"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "db3"
+m_wavelet = "db3"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+# # Coiflets
+# [[runs]]
+# d_run_tag = "coif1"
+# m_wavelet = "coif1"
+# m_decomp = "wavelet"
+# m_seq_dim = 168
+# m_vesa_rank = 64
+# d_seq_len = 336
+# d_pred_len = 96
+# d_test_stride = 96
+
+# [[runs]]
+# d_run_tag = "coif1"
+# m_wavelet = "coif1"
+# m_decomp = "wavelet"
+# m_seq_dim = 168
+# m_vesa_rank = 64
+# d_seq_len = 336
+# d_pred_len = 192
+# d_test_stride = 192
+
+# [[runs]]
+# d_run_tag = "coif1"
+# m_wavelet = "coif1"
+# m_decomp = "wavelet"
+# m_seq_dim = 168
+# m_vesa_rank = 64
+# d_seq_len = 336
+# d_pred_len = 336
+# d_test_stride = 336
+
+# [[runs]]
+# d_run_tag = "coif1"
+# m_wavelet = "coif1"
+# m_decomp = "wavelet"
+# m_seq_dim = 168
+# m_vesa_rank = 64
+# d_seq_len = 336
+# d_pred_len = 720
+# d_test_stride = 720
+
+
+# [[runs]]
+# d_run_tag = "coif3"
+# m_wavelet = "coif3"
+# m_decomp = "wavelet"
+# m_seq_dim = 168
+# m_vesa_rank = 64
+# d_seq_len = 336
+# d_pred_len = 96
+# d_test_stride = 96
+
+# [[runs]]
+# d_run_tag = "coif3"
+# m_wavelet = "coif3"
+# m_decomp = "wavelet"
+# m_seq_dim = 168
+# m_vesa_rank = 64
+# d_seq_len = 336
+# d_pred_len = 192
+# d_test_stride = 192
+
+# [[runs]]
+# d_run_tag = "coif3"
+# m_wavelet = "coif3"
+# m_decomp = "wavelet"
+# m_seq_dim = 168
+# m_vesa_rank = 64
+# d_seq_len = 336
+# d_pred_len = 336
+# d_test_stride = 336
+
+# [[runs]]
+# d_run_tag = "coif3"
+# m_wavelet = "coif3"
+# m_decomp = "wavelet"
+# m_seq_dim = 168
+# m_vesa_rank = 64
+# d_seq_len = 336
+# d_pred_len = 720
+# d_test_stride = 720
+
+# Symlets
+[[runs]]
+d_run_tag = "sym4"
+m_wavelet = "sym4"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "sym4"
+m_wavelet = "sym4"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "sym4"
+m_wavelet = "sym4"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "sym4"
+m_wavelet = "sym4"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+
+[[runs]]
+d_run_tag = "sym8"
+m_wavelet = "sym8"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "sym8"
+m_wavelet = "sym8"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "sym8"
+m_wavelet = "sym8"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "sym8"
+m_wavelet = "sym8"
+m_decomp = "wavelet"
+m_seq_dim = 168
+m_vesa_rank = 64
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720

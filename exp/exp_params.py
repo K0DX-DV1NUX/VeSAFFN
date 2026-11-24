@@ -7,9 +7,28 @@ import pandas as pd
 import torch
 
 from fvcore.nn import FlopCountAnalysis
+from torch.overrides import TorchFunctionMode
 
-from models import DLinear, PatchTST, iTransformer, FrNet, FITS, FreqMoE, SparseTSF, Vesa, Vesa_ablate, Chronos2
+from models import DLinear, DLinear_ablate, PatchTST, iTransformer, FrNet, FITS, FreqMoE, SparseTSF, CycleNet, TimeEmb, Vesa, Vesa_ablate, Chronos2
 from utils.timefeatures import time_features
+
+
+class _ParamUseTracker(TorchFunctionMode):
+    # Records every nn.Parameter passed to a torch op during forward, so a
+    # parameter read by a module other than its owner (e.g. a shared basis
+    # sliced inside another layer) still counts as active.
+    def __init__(self):
+        super().__init__()
+        self.used = set()
+
+    def __torch_function__(self, func, types, args=(), kwargs=None):
+        kwargs = kwargs or {}
+        for a in list(args) + list(kwargs.values()):
+            if isinstance(a, torch.nn.Parameter):
+                self.used.add(id(a))
+            elif isinstance(a, (list, tuple)):
+                self.used.update(id(t) for t in a if isinstance(t, torch.nn.Parameter))
+        return func(*args, **kwargs)
 
 
 class Exp_Params:
@@ -29,12 +48,15 @@ class Exp_Params:
     def _build_model(self):
         model_dict = {
             'DLinear': DLinear,
+            'DLinear_ablate': DLinear_ablate,
             'PatchTST': PatchTST,
             'iTransformer': iTransformer,
             'FrNet': FrNet,
             'FITS': FITS,
             'FreqMoE': FreqMoE,
             'SparseTSF': SparseTSF,
+            'CycleNet': CycleNet,
+            'TimeEmb': TimeEmb,
             'Vesa': Vesa,
             'Vesa_ablate': Vesa_ablate,
             'Chronos2': Chronos2,
@@ -75,6 +97,15 @@ class Exp_Params:
             batch_x_mark = self._dummy_mark(args.d_seq_len).repeat(args.d_batch_size, 1, 1)
             return (batch_x, batch_x_mark)
 
+        if input_type == "x_index":
+            # Integer time indices at the first forecast step, [B, 3] = (position, hour, weekday).
+            time_index = torch.stack([
+                torch.randint(0, 100000, (args.d_batch_size,)),
+                torch.randint(0, 24, (args.d_batch_size,)),
+                torch.randint(0, 7, (args.d_batch_size,)),
+            ], dim=1).to(self.device)
+            return (batch_x, time_index)
+
         # Encoder-decoder inputs.
         batch_x_mark = self._dummy_mark(args.d_seq_len).repeat(args.d_batch_size, 1, 1)
         dec_len = args.d_label_len + args.d_pred_len
@@ -88,59 +119,35 @@ class Exp_Params:
             torch.cuda.synchronize(self.device)
 
     @torch.no_grad()
-    def profile(self):
+    def profile(self, warmup=10, reps=50):
+        '''
+        Returns size/compute/latency stats for the model under the current
+        configuration:
+          - total / trainable parameters (shared tensors counted once);
+          - active parameters: those read by a forward pass (differs from
+            total when a model owns branches this config never calls);
+          - MACs / FLOPs from fvcore's default handles only (FLOPs = 2 * MACs).
+            Matmul/conv/norm ops are counted; FFTs and element-wise ops are
+            not, and a complex MAC is counted as one MAC;
+          - size in MB of parameters + buffers (complex tensors take 8 bytes,
+            so their real and imaginary parts are both counted);
+          - mean latency of one forward pass at the configured batch size.
+        '''
         self.model.eval()
         inputs = self._build_inputs()
 
-        # Warm-up pass.
-        self.model(*inputs)
-        self._sync()
-
-        # Timed pass; hooks record which modules ran.
-        fired = set()
-        handles = [
-            m.register_forward_hook(lambda mod, inp, out, _m=m: fired.add(id(_m)))
-            for m in self.model.modules()
-        ]
-        try:
-            start = time.perf_counter()
+        # Active parameters: every nn.Parameter passed to a torch op during
+        # one forward pass. This pass also serves as the first warm-up.
+        tracker = _ParamUseTracker()
+        with tracker:
             self.model(*inputs)
-            self._sync()
-            latency_s = time.perf_counter() - start
-        finally:
-            for handle in handles:
-                handle.remove()
 
-        # Shared tensors are counted once.
-        total_params = 0
-        trainable_params = 0
-        size_bytes = 0
-        seen_param_ids = set()
-        seen_buffer_ids = set()
-        active_param_ids = set()
-        params_by_id = {}
-        for m in self.model.modules():
-            for p in m.parameters(recurse=False):
-                pid = id(p)
-                if pid not in seen_param_ids:
-                    seen_param_ids.add(pid)
-                    params_by_id[pid] = p
-                    total_params += p.numel()
-                    size_bytes += p.numel() * p.element_size()
-                    if p.requires_grad:
-                        trainable_params += p.numel()
-                if id(m) in fired:
-                    active_param_ids.add(pid)
-            # Buffers count toward size only.
-            for b in m.buffers(recurse=False):
-                bid = id(b)
-                if bid not in seen_buffer_ids:
-                    seen_buffer_ids.add(bid)
-                    size_bytes += b.numel() * b.element_size()
+        params = list(self.model.parameters())   # shared tensors appear once
+        total_params = sum(p.numel() for p in params)
+        trainable_params = sum(p.numel() for p in params if p.requires_grad)
+        active_params = sum(p.numel() for p in params if id(p) in tracker.used)
+        size_bytes = sum(t.numel() * t.element_size() for t in params + list(self.model.buffers()))
 
-        active_params = sum(params_by_id[pid].numel() for pid in active_param_ids)
-
-        # fvcore counts MACs; FLOPs = 2 * MACs.
         flops_analysis = FlopCountAnalysis(self.model, inputs)
         flops_analysis.unsupported_ops_warnings(False)
         flops_analysis.uncalled_modules_warnings(False)
@@ -153,5 +160,17 @@ class Exp_Params:
             "macs": macs,
             "flops": macs * 2,
             "size_mb": size_bytes / (1024 ** 2),
-            "latency_ms": latency_s * 1000,
+            "latency_ms": self._latency_ms(inputs, warmup, reps),
         }
+
+    def _latency_ms(self, inputs, warmup, reps):
+        # Mean wall-clock time of one uninstrumented forward pass, after
+        # warm-up passes (CUDA kernel selection, allocator, caches).
+        for _ in range(warmup):
+            self.model(*inputs)
+        self._sync()
+        start = time.perf_counter()
+        for _ in range(reps):
+            self.model(*inputs)
+        self._sync()
+        return (time.perf_counter() - start) * 1000 / reps

@@ -1,0 +1,73 @@
+[default]
+# Model
+d_model = "Vesa_ablate"
+d_model_input_type = "x_only"
+
+# RevIN
+m_use_norm = true
+
+# FFN hidden dim D and rank r
+m_seq_dim = 256
+m_vesa_rank = 64
+m_decomp = "wavelet"
+m_wavelet = "db1"
+
+# One run per wavelet and horizon; d_run_tag keeps each wavelet in its own results folder.
+# Daubechies
+[[runs]]
+d_run_tag = "channelwise"
+m_individual = true
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "channelwise"
+m_individual = true
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "channelwise"
+m_individual = true
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "channelwise"
+m_individual = true
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+[[runs]]
+d_run_tag = "general"
+m_individual = false
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "general"
+m_individual = false
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "general"
+m_individual = false
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "general"
+m_individual = false
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+

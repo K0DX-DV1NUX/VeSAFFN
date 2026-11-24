@@ -8,7 +8,7 @@ d_kd_teacher_warmup_epochs = 10
 m_use_norm = true
 
 # false: shared scales, true: per-channel scales
-m_individual = true
+m_individual = false
 
 # FFN hidden dim D and rank r
 m_seq_dim = 256

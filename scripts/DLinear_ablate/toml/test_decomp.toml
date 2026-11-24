@@ -1,0 +1,213 @@
+# DLinear_ablate: decomposition ablation, wavelet vs trend-residual from DLinear's side.
+# Wavelet heads act on the DWT coefficients (L/2 -> H/2), then the inverse DWT.
+
+[default]
+# Model
+d_model = "DLinear_ablate"
+d_model_input_type = "x_only"
+
+# RevIN off, like original DLinear
+m_use_norm = false
+
+# true: one head per channel and band, like DLinear's model.toml
+m_individual = true
+
+# d_run_tag keeps each decomposition in its own results folder.
+
+#### No decomposition: a single L -> H head.
+[[runs]]
+d_run_tag = "no_decomp"
+m_decomp = "none"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "no_decomp"
+m_decomp = "none"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "no_decomp"
+m_decomp = "none"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "no_decomp"
+m_decomp = "none"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+
+#### Trend-residual: DLinear's moving-average split (= original DLinear).
+[[runs]]
+d_run_tag = "trend_residual"
+m_decomp = "trend_residual"
+m_moving_avg = 25
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "trend_residual"
+m_decomp = "trend_residual"
+m_moving_avg = 25
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "trend_residual"
+m_decomp = "trend_residual"
+m_moving_avg = 25
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "trend_residual"
+m_decomp = "trend_residual"
+m_moving_avg = 25
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+
+#### Wavelet: Haar.
+[[runs]]
+d_run_tag = "db1"
+m_decomp = "wavelet"
+m_wavelet = "db1"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "db1"
+m_decomp = "wavelet"
+m_wavelet = "db1"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "db1"
+m_decomp = "wavelet"
+m_wavelet = "db1"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "db1"
+m_decomp = "wavelet"
+m_wavelet = "db1"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+[[runs]]
+d_run_tag = "db3"
+m_decomp = "wavelet"
+m_wavelet = "db3"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "db3"
+m_decomp = "wavelet"
+m_wavelet = "db3"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "db3"
+m_decomp = "wavelet"
+m_wavelet = "db3"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "db3"
+m_decomp = "wavelet"
+m_wavelet = "db3"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+
+
+
+#### Wavelet: Symlet 4.
+[[runs]]
+d_run_tag = "sym4"
+m_decomp = "wavelet"
+m_wavelet = "sym4"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "sym4"
+m_decomp = "wavelet"
+m_wavelet = "sym4"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "sym4"
+m_decomp = "wavelet"
+m_wavelet = "sym4"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "sym4"
+m_decomp = "wavelet"
+m_wavelet = "sym4"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720
+
+
+[[runs]]
+d_run_tag = "sym8"
+m_decomp = "wavelet"
+m_wavelet = "sym8"
+d_seq_len = 336
+d_pred_len = 96
+d_test_stride = 96
+
+[[runs]]
+d_run_tag = "sym8"
+m_decomp = "wavelet"
+m_wavelet = "sym8"
+d_seq_len = 336
+d_pred_len = 192
+d_test_stride = 192
+
+[[runs]]
+d_run_tag = "sym8"
+m_decomp = "wavelet"
+m_wavelet = "sym8"
+d_seq_len = 336
+d_pred_len = 336
+d_test_stride = 336
+
+[[runs]]
+d_run_tag = "sym8"
+m_decomp = "wavelet"
+m_wavelet = "sym8"
+d_seq_len = 336
+d_pred_len = 720
+d_test_stride = 720

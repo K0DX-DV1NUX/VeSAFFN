@@ -1,13 +1,11 @@
-import pywt
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from layers.RevIN import RevIN
-from models.DLinear import series_decomp
+from layers.Decomposition import NoDecomp, TrendResidualDecomp, WaveletDecomp
 
 
 # Shapes: B = batch, L = seq_len, H = pred_len, C = channels,
-# D = hidden dim (m_seq_dim), r = rank (m_vesa_rank), N = wavelet filter length.
+# D = hidden dim (m_seq_dim), r = rank (m_vesa_rank).
 
 
 class VesaLinear(nn.Module):
@@ -74,72 +72,6 @@ class VesaLinearChannelwise(nn.Module):
         if self.bias is not None:
             out = out + self.bias.unsqueeze(0)
         return out
-
-
-class WaveletDecomp(nn.Module):
-    # One-level orthogonal DWT with periodic boundaries, as fixed conv1d filters from PyWavelets.
-    n_bands = 2
-    length_div = 2
-
-    def __init__(self, wavelet):
-        super(WaveletDecomp, self).__init__()
-        wave = pywt.Wavelet(wavelet)
-        if not wave.orthogonal:
-            raise ValueError(f"Wavelet {wavelet} is not orthogonal, the transposed filters would not invert it.")
-
-        # conv1d does not flip its kernel, so the filters go in time-reversed.
-        filters = torch.tensor([wave.dec_lo[::-1], wave.dec_hi[::-1]], dtype=torch.float32)
-        self.register_buffer("filters", filters.unsqueeze(1), persistent=False)  # [2, 1, N]
-        self.pad = wave.dec_len // 2 - 1
-
-    def forward(self, x):
-        # x: [B, C, L]
-        b, c, l = x.shape
-        x = x.reshape(b * c, 1, l)                             # [BC, 1, L]
-        x = F.pad(x, (self.pad, self.pad), mode="circular")    # [BC, 1, L + N - 2]
-        coeffs = F.conv1d(x, self.filters, stride=2)           # [BC, 2, L/2]
-        return coeffs.reshape(b, c, 2, -1).transpose(1, 2).reshape(b, 2 * c, -1)  # [B, 2C, L/2], approx then detail
-
-    def inverse(self, coeffs):
-        # coeffs: [B, 2C, H/2], approx then detail
-        b, c2, h = coeffs.shape
-        c = c2 // 2
-        coeffs = coeffs.reshape(b, 2, c, h).transpose(1, 2).reshape(b * c, 2, h)  # [BC, 2, H/2]
-        coeffs = F.pad(coeffs, (self.pad, self.pad), mode="circular")             # [BC, 2, H/2 + N - 2]
-        out = F.conv_transpose1d(coeffs, self.filters, stride=2)                  # [BC, 1, H + 3N - 6]
-        start = 3 * self.pad
-        return out[..., start:start + 2 * h].reshape(b, c, 2 * h)                 # [B, C, H]
-
-
-class TrendResidualDecomp(nn.Module):
-    # DLinear moving-average split. Length is unchanged, so the inverse is a sum.
-    n_bands = 2
-    length_div = 1
-
-    def __init__(self, kernel_size):
-        super(TrendResidualDecomp, self).__init__()
-        self.decomp = series_decomp(kernel_size)
-
-    def forward(self, x):
-        # x: [B, C, L]
-        res, trend = self.decomp(x.permute(0, 2, 1))           # [B, L, C] each
-        return torch.cat([res, trend], dim=2).permute(0, 2, 1)  # [B, 2C, L]
-
-    def inverse(self, bands):
-        # bands: [B, 2C, H]
-        res, trend = bands.chunk(2, dim=1)                     # [B, C, H] each
-        return res + trend                                     # [B, C, H]
-
-
-class NoDecomp(nn.Module):
-    n_bands = 1
-    length_div = 1
-
-    def forward(self, x):
-        return x
-
-    def inverse(self, bands):
-        return bands
 
 
 class Model(nn.Module):

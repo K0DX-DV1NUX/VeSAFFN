@@ -12,7 +12,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, Dataset
 
 from data_provider.data_factory import TimeSeriesDataset
-from models import Chronos2, DLinear, FITS, FreqMoE, PatchTST, iTransformer, FrNet, Vesa
+from models import Chronos2, DLinear, FITS, FreqMoE, PatchTST, iTransformer, FrNet, Vesa, Vesa_ablate
 from utils.learning_rates import adjust_learning_rate
 from utils.metrics import metric
 
@@ -35,6 +35,7 @@ OFFLINE_TEACHER_MODELS = {
 # Students allowed in KD.
 STUDENT_MODELS = {
     'Vesa': Vesa,
+    'Vesa_ablate': Vesa_ablate,
     'FITS': FITS,
 }
 
@@ -111,8 +112,12 @@ def _get_inputs(device, args, x, y, x_mark, y_mark):
     batch_x = x.float().to(device)
     batch_y = y.float().to(device)
 
+    # Integer time indices (CycleNet, TimeEmb) stay integers and are kept for every dataset.
+    if args.d_model_input_type.lower() == "x_index":
+        batch_x_mark = x_mark.long().to(device)
+        batch_y_mark = y_mark.long().to(device)
     # No time features for PEMS and Solar.
-    if 'PEMS' in args.d_data or 'Solar' in args.d_data:
+    elif 'PEMS' in args.d_data or 'Solar' in args.d_data:
         batch_x_mark = None
         batch_y_mark = None
     else:
@@ -126,24 +131,27 @@ def _get_inputs(device, args, x, y, x_mark, y_mark):
     return batch_x, batch_y, batch_x_mark, batch_y_mark, dec_inp
 
 
-def _model_args(input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark):
-    # x_only: (x), x_mark_incl: (x, x_mark), otherwise (x, x_mark, dec_inp, y_mark).
+def _model_args(input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark, label_len=0):
+    # x_only: (x), x_mark_incl: (x, x_mark), x_index: (x, time_index [B, 3] at the first forecast step),
+    # otherwise (x, x_mark, dec_inp, y_mark).
     input_type = input_type.lower()
     if input_type == "x_only":
         return (batch_x,)
     if input_type == "x_mark_incl":
         return (batch_x, batch_x_mark)
+    if input_type == "x_index":
+        return (batch_x, batch_y_mark[:, label_len])
     return (batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
 
 def _forward(model, args, batch_x, batch_x_mark, dec_inp, batch_y_mark, amp_context):
     # Runs one model and returns the last pred_len steps, [B, H, C].
-    model_input_args = _model_args(args.d_model_input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark)
+    model_input_args = _model_args(args.d_model_input_type, batch_x, batch_x_mark, dec_inp, batch_y_mark, args.d_label_len)
 
     with amp_context:
         outputs = model(*model_input_args)
 
-    if args.d_model_input_type.lower() not in ["x_only", "x_mark_incl"] and args.d_output_attention:
+    if args.d_model_input_type.lower() not in ["x_only", "x_mark_incl", "x_index"] and args.d_output_attention:
         outputs = outputs[0]
 
     f_dim = -1 if args.d_forecast_type == 'MS' else 0
@@ -200,7 +208,7 @@ class _EarlyStoppingKD:
 
 class Exp_KD:
     # Online KD: teacher and student train together.
-    # loss = L(y, student) + L(y, teacher) + L(teacher, student)
+    # loss = L(y, student) + L(y, teacher) + alpha * L(teacher, student)
     # The teacher trains alone for the first d_kd_teacher_warmup_epochs.
 
     def __init__(self, teacher_args, student_args):
@@ -242,7 +250,7 @@ class Exp_KD:
         teacher_gt_loss = criterion(teacher_out, batch_y)
         student_kd_loss = criterion(teacher_out, student_out)
 
-        train_loss = student_gt_loss + teacher_gt_loss + student_kd_loss
+        train_loss = student_gt_loss + teacher_gt_loss + self.student_args.d_kd_alpha * student_kd_loss
         return train_loss, teacher_gt_loss, student_gt_loss, student_kd_loss
 
     def vali(self, vali_loader, criterion):
@@ -471,7 +479,7 @@ def _frozen_teacher_checkpoint_path(model_name, dataset, pred_len):
 
 class Exp_KD_Offline:
     # Offline KD: the teacher is frozen, only the student trains.
-    # loss = L(y, student) + L(student, teacher)
+    # loss = L(y, student) + alpha * L(student, teacher)
 
     # Results file prefix.
     RESULT_PREFIX = "Result"
@@ -570,7 +578,7 @@ class Exp_KD_Offline:
     def _kd_loss(self, teacher_out, student_out, batch_y, criterion):
         student_gt_loss = criterion(student_out, batch_y)
         student_kd_loss = criterion(student_out, teacher_out)
-        train_loss = student_gt_loss + student_kd_loss
+        train_loss = student_gt_loss + self.student_args.d_kd_alpha * student_kd_loss
 
         # Logged only, not backpropagated.
         teacher_gt_loss = criterion(teacher_out.detach(), batch_y)
